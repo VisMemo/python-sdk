@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOYAN Agent Infrastructure - System Architecture</title>
+    <style>
+        :root {
+            --color-bg: #fafafa;
+            --color-surface: #ffffff;
+            --color-text-primary: #1a1a1a;
+            --color-text-secondary: #6b7280;
+            --color-text-tertiary: #9ca3af;
+            --color-border: #e5e7eb;
+            
+            --color-control: #10b981;
+            --color-observer: #f97316;
+            --color-memory: #3b82f6;
+            --color-gateway: #8b5cf6;
+            
+            --spacing: 8px;
+            --radius: 8px;
+            --font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--color-bg);
+            color: var(--color-text-primary);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: calc(var(--spacing) * 8);
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: calc(var(--spacing) * 8);
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            margin-bottom: calc(var(--spacing) * 2);
+        }
+
+        .header p {
+            font-size: 14px;
+            color: var(--color-text-secondary);
+        }
+
+        /* Architecture Layout */
+        .architecture {
+            display: grid;
+            grid-template-columns: 200px 1fr 200px;
+            gap: calc(var(--spacing) * 4);
+            align-items: start;
+        }
+
+        /* Column Styles */
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: calc(var(--spacing) * 3);
+        }
+
+        .column-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--color-text-tertiary);
+            margin-bottom: calc(var(--spacing) * 1);
+        }
+
+        /* Card Styles */
+        .card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            padding: calc(var(--spacing) * 3);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.06);
+        }
+
+        .card-title {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: calc(var(--spacing) * 1);
+        }
+
+        .card-subtitle {
+            font-size: 11px;
+            color: var(--color-text-secondary);
+            margin-bottom: calc(var(--spacing) * 2);
+        }
+
+        .card-content {
+            font-size: 10px;
+            color: var(--color-text-tertiary);
+            line-height: 1.6;
+        }
+
+        /* Agent Cards */
+        .agent-card {
+            border-left: 3px solid;
+            padding-left: calc(var(--spacing) * 3);
+        }
+
+        .agent-card.control { border-color: var(--color-control); }
+        .agent-card.observer { border-color: var(--color-observer); }
+        .agent-card.memory { border-color: var(--color-memory); }
+
+        .agent-steps {
+            display: flex;
+            flex-direction: column;
+            gap: calc(var(--spacing) * 2);
+            margin-top: calc(var(--spacing) * 2);
+        }
+
+        .step {
+            display: flex;
+            align-items: center;
+            gap: calc(var(--spacing) * 2);
+        }
+
+        .step-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .step-text {
+            font-size: 11px;
+            color: var(--color-text-secondary);
+        }
+
+        /* Flow Arrows */
+        .flow-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: calc(var(--spacing) * 2);
+        }
+
+        .flow-arrow {
+            flex: 1;
+            height: 2px;
+            background: var(--color-border);
+            position: relative;
+        }
+
+        .flow-arrow::after {
+            content: '';
+            position: absolute;
+            right: -6px;
+            top: -3px;
+            width: 0;
+            height: 0;
+            border-left: 6px solid var(--color-border);
+            border-top: 4px solid transparent;
+            border-bottom: 4px solid transparent;
+        }
+
+        /* Memory Layer */
+        .memory-layer {
+            grid-column: 1 / -1;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius);
+            padding: calc(var(--spacing) * 4);
+            margin-top: calc(var(--spacing) * 6);
+        }
+
+        .memory-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: calc(var(--spacing) * 3);
+            margin-top: calc(var(--spacing) * 3);
+        }
+
+        /* Legend */
+        .legend {
+            display: flex;
+            gap: calc(var(--spacing) * 4);
+            justify-content: center;
+            margin-top: calc(var(--spacing) * 6);
+            padding: calc(var(--spacing) * 3);
+            background: var(--color-surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--color-border);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: calc(var(--spacing) * 1);
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+        }
+
+        .legend-text {
+            font-size: 11px;
+            color: var(--color-text-secondary);
+        }
+
+        /* Icon */
+        .icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            background: var(--color-bg);
+            border: 1px solid var(--color-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            margin-bottom: calc(var(--spacing) * 2);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .architecture {
+                grid-template-columns: 1fr;
+            }
+
+            .memory-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media print {
+            body { background: white; }
+            .card:hover { transform: none; box-shadow: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>MOYAN Agent Infrastructure</h1>
+            <p>Multi-Agent Orchestration · Unified Memory Substrate · Event-Driven Architecture</p>
+        </div>
+
+        <!-- Main Architecture -->
+        <div class="architecture">
+            <!-- Input Column -->
+            <div class="column">
+                <div class="column-label">Input Layer</div>
+                
+                <div class="card">
+                    <div class="icon">◉</div>
+                    <div class="card-title">User Input</div>
+                    <div class="card-subtitle">Voice · Text · App</div>
+                </div>
+
+                <div class="card">
+                    <div class="icon">◈</div>
+                    <div class="card-title">Sensor Events</div>
+                    <div class="card-subtitle">Contact · Occupancy · Climate</div>
+                </div>
+
+                <div class="card">
+                    <div class="icon">◐</div>
+                    <div class="card-title">Video Stream</div>
+                    <div class="card-subtitle">Motion · Face Detection</div>
+                </div>
+
+                <div class="card">
+                    <div class="icon">◷</div>
+                    <div class="card-title">Scheduled Tasks</div>
+                    <div class="card-subtitle">Routines · Automation</div>
+                </div>
+            </div>
+
+            <!-- Orchestration Column -->
+            <div class="column">
+                <div class="column-label">Orchestration Layer</div>
+
+                <!-- Event Bus -->
+                <div class="card">
+                    <div class="card-title">Event Aggregator</div>
+                    <div class="card-subtitle">Unified Event Bus</div>
+                    <div class="card-content">
+                        Standardization · Priority Queue · Routing · Backpressure
+                    </div>
+                </div>
+
+                <div class="flow-arrow"></div>
+
+                <!-- Control Agent -->
+                <div class="card agent-card control">
+                    <div class="card-title">Control Agent</div>
+                    <div class="card-subtitle">Passive Response · User Request Handler</div>
+                    
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-text">Memory Retrieval</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-text">Plan & Reason</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-text">Risk Assessment</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">4</div>
+                            <div class="step-text">Execute / Confirm</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Observer Agent -->
+                <div class="card agent-card observer">
+                    <div class="card-title">Observer Agent</div>
+                    <div class="card-subtitle">Active Monitoring · Environment Awareness</div>
+                    
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-text">Rule Match (YAML DSL)</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-text">Anomaly Detection</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-text">Generate Proposal</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Memorization Agent -->
+                <div class="card agent-card memory">
+                    <div class="card-title">Memorization Agent</div>
+                    <div class="card-subtitle">Active Memory · Knowledge Construction</div>
+                    
+                    <div class="agent-steps">
+                        <div class="step">
+                            <div class="step-number">1</div>
+                            <div class="step-text">Feature Extraction</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">2</div>
+                            <div class="step-text">Build Memory Node</div>
+                        </div>
+                        <div class="step">
+                            <div class="step-number">3</div>
+                            <div class="step-text">Update Graph (Episodic + Semantic)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Output Column -->
+            <div class="column">
+                <div class="column-label">Execution Layer</div>
+
+                <div class="card">
+                    <div class="card-title">CAL Gateway</div>
+                    <div class="card-subtitle">MCP Server · Protocol Adapter</div>
+                    <div class="card-content">
+                        Action Semantics · Protocol Adapter · Idempotency · Result Normalization
+                    </div>
+                </div>
+
+                <div class="flow-arrow"></div>
+
+                <div class="card">
+                    <div class="card-title">Device Adapters</div>
+                    <div class="card-content" style="margin-top: 12px;">
+                        Home Assistant<br>
+                        Matter<br>
+                        Web of Things<br>
+                        Vendor Cloud
+                    </div>
+                </div>
+
+                <div class="flow-arrow"></div>
+
+                <div class="column-label" style="margin-top: 24px;">Output Layer</div>
+
+                <div class="card">
+                    <div class="card-title">Response Generation</div>
+                    <div class="card-subtitle">Multi-Channel Format</div>
+                    <div class="card-content">
+                        TTS · UI Update · Notification
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Memory Layer -->
+        <div class="memory-layer">
+            <div class="column-label">Memory Layer · Unified Memory Substrate</div>
+            
+            <div class="memory-grid">
+                <div class="card">
+                    <div class="card-title">Memory Graph</div>
+                    <div class="card-subtitle">MemoryPort.core</div>
+                    <div class="card-content">
+                        ANN Coarse Retrieval → Graph Expansion → Rerank
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Vector Database</div>
+                    <div class="card-subtitle">Qdrant</div>
+                    <div class="card-content">
+                        Multi-modal Embeddings<br>text · image · audio
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Graph Database</div>
+                    <div class="card-subtitle">Neo4j</div>
+                    <div class="card-content">
+                        Entity Relations<br>Semantic Links
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-title">Standard Keys</div>
+                    <div class="card-content" style="margin-top: 12px;">
+                        user_id (list[str])<br>
+                        memory_domain (str)<br>
+                        run_id (str)<br><br>
+                        <strong>Scope Fallback:</strong><br>
+                        session → domain → user
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-control);"></div>
+                <div class="legend-text">Control Agent</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-observer);"></div>
+                <div class="legend-text">Observer Agent</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-memory);"></div>
+                <div class="legend-text">Memorization Agent</div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: var(--color-gateway);"></div>
+                <div class="legend-text">CAL Gateway</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Keyboard shortcut for printing
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                e.preventDefault();
+                window.print();
+            }
+        });
+
+        // Add smooth scroll behavior
+        document.documentElement.style.scrollBehavior = 'smooth';
+    </script>
+</body>
+</html>
+                <path class="flow-arrow control" d="M 720,278 L 720,740 L 390,800" stroke-dasharray="4,4" />
+
+                <!-- Standard Keys Legend -->
+                <rect class="legend-box" x="820" y="800" width="250" height="140" />
+                <text class="module-subtitle" x="945" y="825" text-anchor="middle" font-weight="600">Standard Keys & Scope</text>
+                
+                <text class="legend" x="835" y="850">• user_id (list[str])</text>
+                <text class="legend" x="835" y="868">• memory_domain (str)</text>
+                <text class="legend" x="835" y="886">• run_id (str)</text>
+                
+                <text class="annotation" x="835" y="910">Scope Fallback Chain:</text>
+                <text class="annotation" x="835" y="925">session → domain → user</text>
+
+                <!-- Output Layer -->
+                <text class="layer-label" x="1750" y="140">Output Layer</text>
+                
+                <rect class="module output-module" x="1730" y="250" width="150" height="80" rx="6"/>
+                <text class="module-title" x="1805" y="280" text-anchor="middle">Response Gen</text>
+                <text class="module-subtitle" x="1805" y="297" text-anchor="middle">Multi-Channel Format</text>
+                
+                <rect class="module output-module" x="1730" y="350" width="150" height="40" rx="4" opacity="0.8" />
+                <text class="module-subtitle" x="1805" y="375" text-anchor="middle">TTS</text>
+                
+                <rect class="module output-module" x="1730" y="400" width="150" height="40" rx="4" opacity="0.8" />
+                <text class="module-subtitle" x="1805" y="425" text-anchor="middle">UI</text>
+                
+                <rect class="module output-module" x="1730" y="450" width="150" height="40" rx="4" opacity="0.8" />
+                <text class="module-subtitle" x="1805" y="475" text-anchor="middle">Notification</text>
+                
+                <path class="flow-arrow event" d="M 1805,330 L 1805,350" />
+                <path class="flow-arrow event" d="M 1805,330 L 1805,400" />
+                <path class="flow-arrow event" d="M 1805,330 L 1805,450" />
+                
+                <path class="flow-arrow feedback" d="M 1730,370 L 1650,370 L 1650,140 L 300,140 L 300,300" />
+                <text class="annotation" x="1400" y="135" font-size="8">Confirmation & Feedback Loop</text>
+
+                <path class="flow-arrow control" d="M 1030,320 L 1730,290" />
+
+                <!-- Key Mechanisms -->
+                <rect class="annotation-box" x="1100" y="800" width="300" height="140" />
+                <text class="module-subtitle" x="1250" y="825" text-anchor="middle" font-weight="600">Key Mechanisms</text>
+                
+                <text class="legend" x="1115" y="850" font-weight="600">1. Unified Memory Substrate</text>
+                <text class="annotation" x="1125" y="865">Qdrant (vector) + Neo4j (graph)</text>
+                
+                <text class="legend" x="1115" y="890" font-weight="600">2. Multi-Modal Retrieval</text>
+                <text class="annotation" x="1125" y="905">text/image/audio joint recall</text>
+                
+                <text class="legend" x="1115" y="925" font-weight="600">3. Observability</text>
+                <text class="annotation" x="1125" y="940">Prometheus/Grafana metrics</text>
+
+                <!-- Legend -->
+                <rect class="legend-box" x="1440" y="800" width="430" height="140" />
+                <text class="module-subtitle" x="1655" y="825" text-anchor="middle" font-weight="600">Legend</text>
+                
+                <line x1="1460" y1="850" x2="1510" y2="850" class="flow-arrow control" />
+                <text class="legend" x="1520" y="855">Control Flow</text>
+                
+                <line x1="1460" y1="870" x2="1510" y2="870" class="flow-arrow observer" />
+                <text class="legend" x="1520" y="875">Observer Flow</text>
+                
+                <line x1="1460" y1="890" x2="1510" y2="890" class="flow-arrow memorization" />
+                <text class="legend" x="1520" y="895">Memory Flow</text>
+                
+                <line x1="1460" y1="910" x2="1510" y2="910" class="flow-arrow feedback" />
+                <text class="legend" x="1520" y="915">Feedback / Async</text>
+                
+                <rect class="module control-agent" x="1700" y="840" width="40" height="25" rx="3" />
+                <text class="legend" x="1750" y="857">Control Agent</text>
+                
+                <rect class="module observer-agent" x="1700" y="870" width="40" height="25" rx="3" />
+                <text class="legend" x="1750" y="887">Observer Agent</text>
+                
+                <rect class="module memorization-agent" x="1700" y="900" width="40" height="25" rx="3" />
+                <text class="legend" x="1750" y="917">Memory Agent</text>
+
+            </svg>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const modules = document.querySelectorAll('.module');
+            
+            modules.forEach(module => {
+                module.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-1px)';
+                });
+                
+                module.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
+            });
+
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+                    e.preventDefault();
+                    window.print();
+                }
+            });
+        });
+
+        function exportSVG() {
+            const svg = document.querySelector('svg');
+            const serializer = new XMLSerializer();
+            const source = serializer.serializeToString(svg);
+            const blob = new Blob([source], {type: 'image/svg+xml;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'moyan_architecture_premium.svg';
+            link.click();
+        }
+    </script>
+</body>
+</html>

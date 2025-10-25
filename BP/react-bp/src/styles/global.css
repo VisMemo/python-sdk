@@ -1,0 +1,149 @@
+/* 全局样式 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* 中性暖色系 */
+  --color-bone: #FDFBF7;
+  --color-warm-50: #F5F4F2;
+  --color-warm-100: #E8E6E3;
+  --color-warm-200: #D4D1CC;
+  --color-warm-400: #8B847C;
+  --color-graphite-700: #3A3A3C;
+  --color-graphite-900: #2C2C2E;
+  
+  /* 强调色 */
+  --color-terracotta: #C96850;
+  --color-moss: #2F4538;
+  --color-gold: #B8860B;
+  --color-indigo: #1C2541;
+  
+  /* 语义色 */
+  --color-success: #4A5D4F;
+  --color-warning: #C8975C;
+  --color-error: #B5533D;
+  --color-info: #5C6B78;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--color-graphite-900);
+}
+
+/* 16:9 固定比例容器 */
+.presentation-container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-graphite-900);
+}
+
+.presentation-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 177.78vh; /* 16:9 based on height */
+  max-height: 56.25vw; /* 16:9 based on width */
+  background: var(--color-bone);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+/* 幻灯片页面 */
+.slide {
+  width: 100%;
+  height: 100%;
+  padding: 60px 80px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  background: var(--color-bone);
+}
+
+.slide-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 滚动条样式 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-warm-50);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-warm-200);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-warm-400);
+}
+
+/* Ant Design 组件覆盖 */
+.ant-typography {
+  color: var(--color-graphite-700);
+}
+
+.ant-statistic-content {
+  color: var(--color-terracotta);
+}
+
+/* 动画 */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.scale-in {
+  animation: scaleIn 0.5s ease-out;
+}
+
+/* 减少动画（无障碍） */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

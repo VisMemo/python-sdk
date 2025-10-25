@@ -1,0 +1,255 @@
+/* 幻灯片通用样式 */
+.slide {
+  background: var(--color-bone);
+}
+
+/* 封面页 */
+.slide-cover {
+  background: linear-gradient(135deg, var(--color-bone) 0%, var(--color-warm-50) 100%);
+}
+
+.center-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  height: 100%;
+}
+
+.logo-large {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--color-graphite-900);
+  letter-spacing: 0.05em;
+  margin-bottom: 40px;
+}
+
+.display-title {
+  font-size: 56px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+  color: var(--color-graphite-900) !important;
+  margin: 32px 0 !important;
+  letter-spacing: -0.02em;
+}
+
+.subtitle-large {
+  font-size: 24px;
+  color: var(--color-warm-400);
+  font-weight: 400;
+  margin-top: 24px;
+  display: block;
+}
+
+.contact-info {
+  margin-top: auto;
+  padding-top: 60px;
+}
+
+.quiet-text {
+  color: var(--color-warm-400);
+  font-size: 14px;
+}
+
+/* 卡片样式 */
+.summary-card,
+.highlight-card,
+.insight-card,
+.example-card,
+.judgment-card {
+  height: 100%;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.summary-card:hover,
+.highlight-card:hover,
+.example-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.highlight-card {
+  background: var(--color-warm-50);
+  border: 1px solid var(--color-warm-100);
+}
+
+/* 列表样式 */
+.bullet-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+
+.bullet-list li {
+  padding: 8px 0;
+  padding-left: 24px;
+  position: relative;
+  line-height: 1.6;
+}
+
+.bullet-list li::before {
+  content: "•";
+  position: absolute;
+  left: 0;
+  color: var(--color-terracotta);
+  font-weight: bold;
+  font-size: 20px;
+}
+
+.check-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+
+.check-list li {
+  padding: 8px 0;
+  padding-left: 28px;
+  position: relative;
+  line-height: 1.6;
+}
+
+.check-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-success);
+  font-weight: 600;
+  font-size: 18px;
+}
+
+/* 强调文本 */
+.accent-text {
+  color: var(--color-terracotta) !important;
+}
+
+/* 统计卡片 */
+.ant-statistic-title {
+  font-size: 14px;
+  color: var(--color-warm-400);
+  margin-bottom: 8px;
+}
+
+.ant-statistic-content {
+  font-weight: 600;
+}
+
+/* 架构图 */
+.architecture-layer {
+  background: white;
+  border: 2px solid var(--color-warm-200);
+  border-radius: 8px;
+  padding: 32px;
+  text-align: center;
+  margin: 16px 0;
+  transition: all 0.2s ease;
+}
+
+.architecture-layer:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.architecture-layer.highlight {
+  border-color: var(--color-terracotta);
+  border-width: 3px;
+  background: linear-gradient(135deg, white 0%, var(--color-warm-50) 100%);
+}
+
+.architecture-arrow {
+  text-align: center;
+  color: var(--color-warm-400);
+  font-size: 32px;
+  line-height: 1;
+  margin: -8px 0;
+}
+
+/* 时间线 */
+.timeline-section {
+  position: relative;
+  padding-left: 32px;
+  margin-top: 24px;
+}
+
+.timeline-section::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-warm-100);
+}
+
+.timeline-item {
+  position: relative;
+  padding-bottom: 32px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -37px;
+  top: 8px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-terracotta);
+  border: 2px solid var(--color-bone);
+}
+
+/* 对比矩阵 */
+.comparison-matrix {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.matrix-cell {
+  background: white;
+  border: 1px solid var(--color-warm-100);
+  border-radius: 8px;
+  padding: 24px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.matrix-cell.highlight {
+  background: var(--color-terracotta);
+  color: white;
+  border-color: var(--color-terracotta);
+}
+
+.matrix-cell:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* 资金用途图 */
+.funding-bar {
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
+  color: white;
+  font-weight: 600;
+  margin: 8px 0;
+  transition: width 1s ease-out;
+}
+
+/* 响应式调整 */
+@media (max-width: 1400px) {
+  .display-title {
+    font-size: 48px !important;
+  }
+  
+  .logo-large {
+    font-size: 40px;
+  }
+}

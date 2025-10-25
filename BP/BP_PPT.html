@@ -1,0 +1,2477 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MOYAN AI - 为物理世界装上感知、记忆与主动智能的大脑</title>
+    <style>
+        /* ========================================
+           Design Tokens - 基于中性暖色系统
+           ======================================== */
+        :root {
+            /* 主色系 - 中性基底 */
+            --color-bone: #FDFBF7;
+            --color-warm-50: #F5F4F2;
+            --color-warm-100: #E8E6E3;
+            --color-warm-200: #D4D1CC;
+            --color-warm-400: #8B847C;
+            --color-graphite-700: #3A3A3C;
+            --color-graphite-900: #2C2C2E;
+            
+            /* 强调色 - 低饱和点缀 */
+            --color-terracotta: #C96850;
+            --color-moss: #2F4538;
+            --color-gold: #B8860B;
+            --color-indigo: #1C2541;
+            
+            /* 语义色 */
+            --color-success: #4A5D4F;
+            --color-warning: #C8975C;
+            --color-error: #B5533D;
+            --color-info: #5C6B78;
+            
+            /* 排版 */
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            --font-display: 64px;
+            --font-h1: 42px;
+            --font-h2: 32px;
+            --font-h3: 22px;
+            --font-body: 16px;
+            --font-small: 13px;
+            
+            --line-display: 1.1;
+            --line-h1: 1.2;
+            --line-h2: 1.3;
+            --line-h3: 1.4;
+            --line-body: 1.6;
+            
+            /* 间距 - 8pt grid */
+            --space-1: 4px;
+            --space-2: 8px;
+            --space-3: 14px;
+            --space-4: 20px;
+            --space-5: 28px;
+            --space-6: 40px;
+            --space-7: 52px;
+            --space-8: 72px;
+            --space-9: 96px;
+            
+            /* 圆角 */
+            --radius-sm: 2px;
+            --radius-md: 4px;
+            --radius-lg: 8px;
+            
+            /* 阴影 */
+            --shadow-subtle: 0 2px 8px rgba(0, 0, 0, 0.06);
+            --shadow-medium: 0 4px 16px rgba(0, 0, 0, 0.08);
+            
+            /* 动效 */
+            --transition-fast: 120ms ease;
+            --transition-base: 180ms ease-out;
+            --transition-slow: 240ms ease-out;
+        }
+        
+        /* ========================================
+           Reset & Base
+           ======================================== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html {
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        
+        body {
+            font-family: var(--font-sans);
+            background: var(--color-bone);
+            color: var(--color-graphite-700);
+            line-height: var(--line-body);
+            overflow: hidden;
+        }
+        
+        /* ========================================
+           Layout
+           ======================================== */
+        .presentation {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--color-graphite-900);
+        }
+        
+        .presentation-wrapper {
+            width: 100%;
+            height: 100%;
+            max-width: 177.78vh; /* 16:9 aspect ratio based on height */
+            max-height: 56.25vw; /* 16:9 aspect ratio based on width */
+            position: relative;
+            background: var(--color-bone);
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
+        }
+        
+        .slide {
+            width: 100%;
+            height: 100%;
+            padding: var(--space-7) var(--space-8);
+            display: none;
+            flex-direction: column;
+            justify-content: flex-start;
+            opacity: 0;
+            transition: opacity var(--transition-base);
+            overflow-y: auto;
+            overflow-x: hidden;
+            position: relative;
+        }
+        
+        .slide.active {
+            display: flex;
+            opacity: 1;
+            animation: slideIn var(--transition-base) ease-out;
+        }
+        
+        .slide-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            padding-bottom: var(--space-6);
+        }
+        
+        /* Smooth scrollbar */
+        .slide::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .slide::-webkit-scrollbar-track {
+            background: var(--color-warm-50);
+        }
+        
+        .slide::-webkit-scrollbar-thumb {
+            background: var(--color-warm-200);
+            border-radius: 4px;
+        }
+        
+        .slide::-webkit-scrollbar-thumb:hover {
+            background: var(--color-warm-400);
+        }
+        
+        /* Animations */
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes scaleIn {
+            from {
+                opacity: 0;
+                transform: scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+        
+        /* Stagger animations for cards */
+        .slide.active .card {
+            animation: fadeInUp 0.5s ease-out backwards;
+        }
+        
+        .slide.active .grid-2 .card:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+        
+        .slide.active .grid-2 .card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .slide.active .grid-3 .card:nth-child(1) {
+            animation-delay: 0.1s;
+        }
+        
+        .slide.active .grid-3 .card:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .slide.active .grid-3 .card:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+        
+        .slide.active h1 {
+            animation: fadeInUp 0.4s ease-out;
+        }
+        
+        .slide.active h2 {
+            animation: fadeInUp 0.5s ease-out 0.1s backwards;
+        }
+        
+        /* Stat numbers count-up effect */
+        .stat-number {
+            display: inline-block;
+        }
+        
+        .slide.active .stat-number {
+            animation: scaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+        }
+        
+        .slide.active .stat-grid .stat-card:nth-child(1) .stat-number {
+            animation-delay: 0.2s;
+        }
+        
+        .slide.active .stat-grid .stat-card:nth-child(2) .stat-number {
+            animation-delay: 0.4s;
+        }
+        
+        .slide.active .stat-grid .stat-card:nth-child(3) .stat-number {
+            animation-delay: 0.6s;
+        }
+        
+        /* ========================================
+           Typography
+           ======================================== */
+        .display {
+            font-size: var(--font-display);
+            line-height: var(--line-display);
+            font-weight: 600;
+            color: var(--color-graphite-900);
+            letter-spacing: -0.02em;
+        }
+        
+        h1, .h1 {
+            font-size: var(--font-h1);
+            line-height: var(--line-h1);
+            font-weight: 600;
+            color: var(--color-graphite-900);
+            margin-bottom: var(--space-5);
+            letter-spacing: -0.01em;
+        }
+        
+        h2, .h2 {
+            font-size: var(--font-h2);
+            line-height: var(--line-h2);
+            font-weight: 600;
+            color: var(--color-graphite-900);
+            margin-bottom: var(--space-3);
+            margin-top: var(--space-5);
+        }
+        
+        h3, .h3 {
+            font-size: var(--font-h3);
+            line-height: var(--line-h3);
+            font-weight: 500;
+            color: var(--color-graphite-900);
+            margin-bottom: var(--space-2);
+        }
+        
+        p {
+            font-size: var(--font-body);
+            line-height: var(--line-body);
+            color: var(--color-graphite-700);
+            margin-bottom: var(--space-2);
+        }
+        
+        .subtitle {
+            font-size: var(--font-h3);
+            color: var(--color-warm-400);
+            font-weight: 400;
+            margin-top: var(--space-2);
+        }
+        
+        .accent {
+            color: var(--color-terracotta);
+            font-weight: 500;
+        }
+        
+        .quiet {
+            color: var(--color-warm-400);
+            font-size: var(--font-small);
+        }
+        
+        /* ========================================
+           Components
+           ======================================== */
+        .card {
+            background: white;
+            border: 1px solid var(--color-warm-100);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            box-shadow: var(--shadow-subtle);
+            margin-bottom: var(--space-3);
+            transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+        }
+        
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+        
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--space-5);
+            margin-top: var(--space-5);
+        }
+        
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--space-4);
+            margin-top: var(--space-4);
+        }
+        
+        .list-clean {
+            list-style: none;
+            padding: 0;
+            margin-bottom: var(--space-2);
+        }
+        
+        .list-clean li {
+            padding: var(--space-2) 0;
+            border-bottom: 1px solid var(--color-warm-100);
+            font-size: var(--font-small);
+            line-height: 1.5;
+        }
+        
+        .list-clean li:last-child {
+            border-bottom: none;
+        }
+        
+        .list-check li::before {
+            content: "✓";
+            color: var(--color-success);
+            font-weight: 600;
+            margin-right: var(--space-2);
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: var(--space-1) var(--space-3);
+            border-radius: var(--radius-sm);
+            font-size: var(--font-small);
+            font-weight: 500;
+            background: var(--color-warm-50);
+            color: var(--color-graphite-700);
+            border: 1px solid var(--color-warm-100);
+        }
+        
+        .divider {
+            height: 1px;
+            background: var(--color-warm-100);
+            margin: var(--space-5) 0;
+        }
+        
+        /* ========================================
+           Navigation
+           ======================================== */
+        .nav-buttons {
+            position: fixed;
+            bottom: var(--space-5);
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: var(--space-4);
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .nav-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: white;
+            border: 2px solid var(--color-warm-200);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--transition-fast);
+            box-shadow: var(--shadow-subtle);
+        }
+        
+        .nav-btn:hover:not(:disabled) {
+            background: var(--color-terracotta);
+            border-color: var(--color-terracotta);
+            color: white;
+            transform: scale(1.1);
+            box-shadow: var(--shadow-medium);
+        }
+        
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        
+        .nav-btn svg {
+            width: 24px;
+            height: 24px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+        }
+        
+        .nav-dots {
+            position: fixed;
+            right: var(--space-5);
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2);
+            z-index: 100;
+        }
+        
+        .nav-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--color-warm-200);
+            cursor: pointer;
+            transition: all var(--transition-fast);
+            border: none;
+        }
+        
+        .nav-dot:hover {
+            background: var(--color-warm-400);
+            transform: scale(1.2);
+        }
+        
+        .nav-dot.active {
+            background: var(--color-terracotta);
+            width: 12px;
+            height: 12px;
+        }
+        
+        .slide-number {
+            position: fixed;
+            bottom: var(--space-4);
+            right: var(--space-5);
+            font-size: var(--font-small);
+            color: var(--color-warm-400);
+            z-index: 100;
+        }
+        
+        /* ========================================
+           Specific Slide Styles
+           ======================================== */
+        
+        /* Cover Slide */
+        .slide-cover {
+            background: linear-gradient(135deg, var(--color-bone) 0%, var(--color-warm-50) 100%);
+            text-align: center;
+        }
+
+        .slide-cover .logo {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--color-graphite-900);
+            margin-bottom: var(--space-4);
+            letter-spacing: 0.05em;
+        }
+
+        /* Cover Metrics */
+        .metric-card {
+            background: white;
+            border: 2px solid var(--color-terracotta);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            text-align: center;
+            box-shadow: var(--shadow-medium);
+            transition: transform var(--transition-base);
+        }
+
+        .metric-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(201, 104, 80, 0.15);
+        }
+
+        .metric-number {
+            font-size: 36px;
+            font-weight: 700;
+            color: var(--color-terracotta);
+            line-height: 1;
+            margin-bottom: var(--space-2);
+        }
+
+        .metric-label {
+            font-size: var(--font-small);
+            color: var(--color-warm-400);
+            font-weight: 500;
+        }
+
+        /* Executive Summary Styles */
+        .exec-summary-section {
+            margin-bottom: var(--space-6);
+        }
+
+        .opportunity-card, .solution-card, .vp-card {
+            background: white;
+            border: 1px solid var(--color-warm-100);
+            border-radius: var(--radius-md);
+            padding: var(--space-5);
+            box-shadow: var(--shadow-subtle);
+            margin-bottom: var(--space-4);
+        }
+
+        .opportunity-card h2 {
+            color: var(--color-terracotta);
+            margin-bottom: var(--space-4);
+        }
+
+        .pain-point {
+            text-align: center;
+            padding: var(--space-4);
+            border-radius: var(--radius-md);
+            background: var(--color-warm-50);
+            transition: transform var(--transition-fast);
+        }
+
+        .pain-point:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .pain-icon {
+            font-size: 32px;
+            margin-bottom: var(--space-2);
+        }
+
+        .pain-point h3 {
+            font-size: var(--font-h3);
+            margin-bottom: var(--space-2);
+            color: var(--color-graphite-900);
+        }
+
+        .architecture-mini {
+            max-width: 600px;
+            margin: var(--space-4) auto;
+        }
+
+        .arch-row {
+            display: flex;
+            justify-content: center;
+            gap: var(--space-3);
+            margin-bottom: var(--space-3);
+        }
+
+        .arch-box {
+            background: var(--color-warm-50);
+            border: 2px solid var(--color-warm-200);
+            border-radius: var(--radius-md);
+            padding: var(--space-2) var(--space-3);
+            font-weight: 500;
+            font-size: var(--font-small);
+            transition: all var(--transition-fast);
+        }
+
+        .arch-box.highlight {
+            background: var(--color-terracotta);
+            color: white;
+            border-color: var(--color-terracotta);
+        }
+
+        .arch-box:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .arch-arrow {
+            text-align: center;
+            font-size: 24px;
+            color: var(--color-warm-400);
+            margin: var(--space-2) 0;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: var(--space-3);
+            margin-top: var(--space-4);
+        }
+
+        .metric-item {
+            background: white;
+            border: 1px solid var(--color-warm-100);
+            border-radius: var(--radius-md);
+            padding: var(--space-4);
+            text-align: center;
+            box-shadow: var(--shadow-subtle);
+            transition: transform var(--transition-fast);
+        }
+
+        .metric-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-medium);
+        }
+
+        .metric-value {
+            font-size: var(--font-h3);
+            font-weight: 700;
+            margin-bottom: var(--space-2);
+            line-height: 1.2;
+        }
+
+        .metric-value.success {
+            color: var(--color-success);
+        }
+
+        .metric-value.primary {
+            color: var(--color-terracotta);
+        }
+
+        .metric-value.info {
+            color: var(--color-info);
+        }
+
+        .metric-value.warning {
+            color: var(--color-warning);
+        }
+
+        .metric-desc {
+            font-size: var(--font-small);
+            color: var(--color-warm-400);
+        }
+
+        .value-proposition {
+            margin-top: var(--space-5);
+        }
+
+        .vp-card {
+            background: linear-gradient(135deg, var(--color-warm-50) 0%, white 100%);
+            border-left: 4px solid var(--color-terracotta);
+        }
+
+        .vp-card h2 {
+            color: var(--color-terracotta);
+            margin-bottom: var(--space-4);
+        }
+        
+        /* Data Slide */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: var(--space-4);
+            margin-top: var(--space-5);
+        }
+        
+        .stat-card {
+            text-align: center;
+            padding: var(--space-5);
+            background: white;
+            border: 1px solid var(--color-warm-100);
+            border-radius: var(--radius-md);
+        }
+        
+        .stat-number {
+            font-size: 42px;
+            font-weight: 700;
+            color: var(--color-terracotta);
+            line-height: 1;
+            margin-bottom: var(--space-2);
+        }
+        
+        .stat-label {
+            font-size: var(--font-small);
+            color: var(--color-warm-400);
+        }
+        
+        /* Timeline */
+        .timeline {
+            position: relative;
+            padding-left: var(--space-5);
+            margin-top: var(--space-5);
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: var(--color-warm-100);
+        }
+        
+        .timeline-item {
+            position: relative;
+            padding-bottom: var(--space-4);
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -25px;
+            top: 8px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--color-terracotta);
+            border: 2px solid var(--color-bone);
+        }
+        
+        /* Table */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: var(--space-4);
+            font-size: var(--font-small);
+        }
+        
+        th, td {
+            padding: var(--space-2) var(--space-3);
+            text-align: left;
+            border-bottom: 1px solid var(--color-warm-100);
+            line-height: 1.5;
+        }
+        
+        th {
+            font-weight: 600;
+            color: var(--color-graphite-900);
+            background: var(--color-warm-50);
+        }
+        
+        /* Focus visible for accessibility */
+        *:focus-visible {
+            outline: 2px solid var(--color-terracotta);
+            outline-offset: 2px;
+        }
+        
+        /* Progress bar for scroll indicator */
+        .scroll-indicator {
+            position: fixed;
+            bottom: var(--space-4);
+            left: 50%;
+            transform: translateX(-50%);
+            width: 200px;
+            height: 2px;
+            background: var(--color-warm-100);
+            border-radius: 1px;
+            z-index: 99;
+            overflow: hidden;
+        }
+        
+        .scroll-progress {
+            height: 100%;
+            background: var(--color-terracotta);
+            width: 0%;
+            transition: width var(--transition-fast);
+        }
+        
+        /* Chart styling */
+        .chart-container {
+            position: relative;
+            padding: var(--space-5);
+            background: var(--color-warm-50);
+            border-radius: var(--radius-md);
+            margin: var(--space-5) 0;
+        }
+        
+        .progress-bar {
+            height: 24px;
+            background: var(--color-warm-100);
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            margin: var(--space-3) 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--color-terracotta) 0%, var(--color-moss) 100%);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: var(--space-2);
+            color: white;
+            font-size: var(--font-small);
+            font-weight: 600;
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .slide.active .progress-fill {
+            animation: progressGrow 1.2s ease-out;
+        }
+        
+        @keyframes progressGrow {
+            from {
+                width: 0%;
+            }
+        }
+        
+        /* Floating action button for scroll to top */
+        .scroll-top-btn {
+            position: fixed;
+            bottom: 80px;
+            right: var(--space-5);
+            width: 48px;
+            height: 48px;
+            background: var(--color-terracotta);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: all var(--transition-base);
+            z-index: 98;
+            box-shadow: var(--shadow-medium);
+        }
+        
+        .scroll-top-btn.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .scroll-top-btn:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(201, 104, 80, 0.3);
+        }
+        
+        /* ========================================
+           Custom Chart Components
+           ======================================== */
+        
+        /* Three-Layer Architecture Diagram */
+        .architecture-diagram {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-4);
+            padding: var(--space-6);
+            background: var(--color-warm-50);
+            border-radius: var(--radius-md);
+            margin: var(--space-5) 0;
+        }
+        
+        .arch-layer {
+            background: white;
+            border: 2px solid var(--color-warm-200);
+            border-radius: var(--radius-md);
+            padding: var(--space-5);
+            text-align: center;
+            position: relative;
+            box-shadow: var(--shadow-subtle);
+            transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+        }
+        
+        .arch-layer:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-medium);
+        }
+        
+        .arch-layer.highlight {
+            border-color: var(--color-terracotta);
+            border-width: 3px;
+            background: linear-gradient(135deg, white 0%, var(--color-warm-50) 100%);
+        }
+        
+        .arch-layer-title {
+            font-size: var(--font-h3);
+            font-weight: 600;
+            color: var(--color-graphite-900);
+            margin-bottom: var(--space-2);
+        }
+        
+        .arch-layer-content {
+            font-size: var(--font-body);
+            color: var(--color-warm-400);
+            line-height: 1.5;
+        }
+        
+        .arch-arrow {
+            text-align: center;
+            color: var(--color-warm-400);
+            font-size: 32px;
+            line-height: 1;
+            margin: calc(-1 * var(--space-3)) 0;
+        }
+        
+        /* Four Quadrant Competition Matrix */
+        .quadrant-matrix {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background: white;
+            border: 2px solid var(--color-warm-200);
+            border-radius: var(--radius-md);
+            margin: var(--space-5) 0;
+            padding: var(--space-5);
+        }
+        
+        .quadrant-axis {
+            position: absolute;
+            background: var(--color-warm-200);
+        }
+        
+        .quadrant-axis.vertical {
+            left: 50%;
+            top: 40px;
+            bottom: 40px;
+            width: 2px;
+            transform: translateX(-50%);
+        }
+        
+        .quadrant-axis.horizontal {
+            top: 50%;
+            left: 40px;
+            right: 40px;
+            height: 2px;
+            transform: translateY(-50%);
+        }
+        
+        .quadrant-label {
+            position: absolute;
+            font-size: var(--font-small);
+            font-weight: 600;
+            color: var(--color-warm-400);
+        }
+        
+        .quadrant-label.y-axis {
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .quadrant-label.x-axis {
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        
+        .quadrant-player {
+            position: absolute;
+            padding: var(--space-3) var(--space-4);
+            border-radius: var(--radius-md);
+            font-size: var(--font-small);
+            font-weight: 500;
+            text-align: center;
+            box-shadow: var(--shadow-subtle);
+            transition: all var(--transition-fast);
+            cursor: default;
+        }
+        
+        .quadrant-player:hover {
+            transform: scale(1.05);
+            box-shadow: var(--shadow-medium);
+            z-index: 10;
+        }
+        
+        .quadrant-player.highlight {
+            background: var(--color-terracotta);
+            color: white;
+            border: 2px solid var(--color-terracotta);
+            font-weight: 600;
+            padding: var(--space-4) var(--space-5);
+        }
+        
+        .quadrant-player.competitor {
+            background: var(--color-warm-50);
+            border: 1px solid var(--color-warm-200);
+            color: var(--color-graphite-700);
+        }
+        
+        /* Reduce motion for accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+        
+        /* Print styles */
+        @media print {
+            .nav-dots, .slide-number, .scroll-indicator, .scroll-top-btn {
+                display: none;
+            }
+            
+            .slide {
+                display: flex !important;
+                page-break-after: always;
+                overflow: visible !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <div class="presentation-wrapper" id="presentation">
+        
+        <!-- Slide 1: Cover -->
+        <section class="slide slide-cover active" data-slide="1">
+            <div class="slide-content">
+                <div class="logo">MOYAN AI</div>
+                <h1 class="display">让硬件拥有<br>感知记忆与主动智能</h1>
+                <p class="subtitle">AI Agent Physical-World Infrastructure</p>
+
+                <!-- 关键指标展示 -->
+                <div class="cover-metrics" style="margin-top: 80px;">
+                    <div class="grid-3" style="max-width: 900px; margin: 0 auto;">
+                        <div class="metric-card">
+                            <div class="metric-number">150ms</div>
+                            <div class="metric-label">主动响应时间</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-number">¥50万</div>
+                            <div class="metric-label">首笔订单金额</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-number">75%</div>
+                            <div class="metric-label">毛利率</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 64px;">
+                    <p class="quiet">[创始人姓名], CEO</p>
+                    <p class="quiet">[联系电话] | [邮箱]</p>
+                    <p class="quiet">2025年3月</p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 2: Executive Summary -->
+        <section class="slide" data-slide="2">
+            <div class="slide-content">
+                <h1>执行摘要</h1>
+
+                <!-- 核心机会与问题 -->
+                <div class="exec-summary-section">
+                    <div class="opportunity-card">
+                        <h2>AI的物理世界失忆症</h2>
+                        <div class="grid-3">
+                            <div class="pain-point">
+                                <div class="pain-icon">🧠</div>
+                                <h3>无长期记忆</h3>
+                                <p class="quiet">不记得钥匙位置<br>不察觉健康趋势</p>
+                            </div>
+                            <div class="pain-point">
+                                <div class="pain-icon">👁️</div>
+                                <h3>无情境理解</h3>
+                                <p class="quiet">看不懂异常行为<br>不理解组合风险</p>
+                            </div>
+                            <div class="pain-point">
+                                <div class="pain-icon">⚡</div>
+                                <h3>完全被动</h3>
+                                <p class="quiet">99.7%服务机会<br>因被动响应错失</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 解决方案 -->
+                <div class="exec-summary-section">
+                    <div class="solution-card">
+                        <h2>MOYAN物理世界基础设施</h2>
+                        <div class="architecture-mini">
+                            <div class="arch-row">
+                                <div class="arch-box highlight">感知SDK</div>
+                                <div class="arch-box highlight">记忆API</div>
+                                <div class="arch-box highlight">控制网关</div>
+                            </div>
+                            <div class="arch-arrow">↓</div>
+                            <div class="arch-row">
+                                <div class="arch-box">硬件设备</div>
+                            </div>
+                        </div>
+                        <p class="accent" style="text-align: center; margin-top: 16px;">
+                            <strong>150ms主动响应</strong> | <strong>跨场景长期记忆</strong> | <strong>无需激活自主决策</strong>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 关键数据和进展 -->
+                <div class="exec-summary-section">
+                    <h2>关键进展与指标</h2>
+                    <div class="metrics-grid">
+                        <div class="metric-item">
+                            <div class="metric-value success">✅ MVP上线</div>
+                            <div class="metric-desc">核心功能验证完成</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value primary">¥50万</div>
+                            <div class="metric-desc">首笔订单已签约</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value info">3家</div>
+                            <div class="metric-desc">POC客户进行中</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-value warning">¥200万</div>
+                            <div class="metric-desc">天使轮融资需求</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 核心价值主张 -->
+                <div class="value-proposition">
+                    <div class="vp-card">
+                        <h2>为什么选择我们？</h2>
+                        <div class="grid-2">
+                            <div>
+                                <h3>技术壁垒</h3>
+                                <ul class="list-clean list-check">
+                                    <li>统一记忆底座，检索效率100%提升</li>
+                                    <li>多模态融合，准确率47.3%提升</li>
+                                    <li>边缘推理优化，150ms主动响应</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h3>商业价值</h3>
+                                <ul class="list-clean list-check">
+                                    <li>LTV/CAC = 7.8倍，健康模型</li>
+                                    <li>毛利率75%，可持续盈利</li>
+                                    <li>3年目标10万台设备，ARR ¥14.4M</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 3: Market Insight -->
+        <section class="slide" data-slide="3">
+            <div class="slide-content">
+                <h1>建立认知 — AI的下一步在物理世界</h1>
+                
+                <h2>为什么规模扩大遇到瓶颈？</h2>
+                <div class="card">
+                    <p style="font-family: monospace; color: var(--color-warm-400);">
+                        GPT-3 (175B) → GPT-4 (~1.8T)：质的飞跃<br>
+                        GPT-4 → GPT-5 (>10T)：提升主要在边缘case
+                    </p>
+                    <p><strong>结论：继续堆参数，已接近天花板</strong></p>
+                </div>
+                
+                <h2 style="margin-top: 48px;">语言的根本局限</h2>
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>案例："把杯子放在桌子上"</h3>
+                        <p><strong>语言：</strong>5个字，极简</p>
+                        <p><strong>物理：</strong>需理解重力、摩擦、碰撞、手眼协调、材质硬度...</p>
+                    </div>
+                    
+                    <div class="card" style="background: var(--color-moss); color: white;">
+                        <h3 style="color: white;">我们的判断</h3>
+                        <p style="color: rgba(255,255,255,0.9);">我们相信：下一代AI必须接入物理世界数据，直接学习物理规律。</p>
+                        <p style="color: rgba(255,255,255,0.9);">谁能率先构建"AI连接物理世界"的基础设施，谁就有机会引领这个趋势。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 4: Problem Definition -->
+        <section class="slide" data-slide="4">
+            <div class="slide-content">
+                <h1>问题定义 — AI的"物理世界失忆症"</h1>
+                
+                <h2>当前AI的三大本质缺陷</h2>
+                
+                <div class="grid-3">
+                    <div class="card">
+                        <h3>痛点一：没有长期记忆</h3>
+                        <p><strong>家庭场景</strong></p>
+                        <p class="quiet">智能音箱能播放音乐<br>
+                        ❌ 不记得你昨天把钥匙放哪了<br>
+                        ❌ 不知道你三个月前说过"最近血压有点高"</p>
+                        
+                        <p style="margin-top: 16px;"><strong>企业场景</strong></p>
+                        <p class="quiet">AI质检能识别当前缺陷<br>
+                        ❌ 无法理解"这台机器震动频率在过去三周缓慢增加"</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>痛点二：无法理解物理情境</h3>
+                        <p class="quiet">摄像头能看到画面<br>
+                        ❌ 不理解"老人手部颤抖"意味着需要帮助<br><br>
+                        ❌ 不理解"室温28度 + 老人未开空调 + 心率偏快"的组合风险</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>痛点三：完全被动，零主动性</h3>
+                        <p class="quiet">现有AI都是"你不问，它不答"</p>
+                        <p class="accent" style="margin-top: 24px;"><strong>错失了大部分"本应主动服务"的机会</strong></p>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <p style="text-align: center; font-size: 20px; color: var(--color-graphite-900);">
+                    <strong>根本原因：</strong>当前AI没有跳出语言本身的局限性，<br>
+                    记忆存储形态无法对物理空间产生有效信息提取
+                </p>
+            </div>
+        </section>
+        
+        <!-- Slide 5: Solution Overview -->
+        <section class="slide" data-slide="5">
+            <div class="slide-content">
+                <h1>解决方案概述 — MOYAN物理世界基础设施</h1>
+                
+                <h2>我们提供的不是产品，而是完整基础设施</h2>
+                
+                <div class="architecture-diagram">
+                    <div class="arch-layer">
+                        <div class="arch-layer-title">应用层 (垂直场景SDK)</div>
+                        <div class="arch-layer-content">AI陪伴机器人 | 智能质检 | 智能摄像头</div>
+                    </div>
+                    
+                    <div class="arch-arrow">↕</div>
+                    
+                    <div class="arch-layer highlight">
+                        <div class="arch-layer-title">基础设施层 (MOYAN Core)</div>
+                        <div class="arch-layer-content">感知SDK | 记忆API | 控制网关</div>
+                    </div>
+                    
+                    <div class="arch-arrow">↕</div>
+                    
+                    <div class="arch-layer">
+                        <div class="arch-layer-title">硬件层 (物理世界)</div>
+                        <div class="arch-layer-content">摄像头 | 传感器 | 机器人 | 智能家居</div>
+                    </div>
+                </div>
+                
+                <div class="grid-3">
+                    <div class="card">
+                        <h3>1. 多模态感知</h3>
+                        <p class="quiet">让设备能"看懂"(视觉)、"听懂"(音频)、"闻到"(嗅觉)物理世界</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>2. 永久记忆</h3>
+                        <p class="quiet">为设备提供"海马体"，形成跨时间、跨场景的长期记忆</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>3. 主动决策</h3>
+                        <p class="quiet">无需人类激活，AI自主判断并主动响应</p>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; margin-top: 64px; font-size: 24px; color: var(--color-terracotta);">
+                    <strong>让客户的硬件产品<br>从"听话的工具"进化为"主动的伙伴"</strong>
+                </p>
+            </div>
+        </section>
+        
+        <!-- Slide 6: Technical Architecture -->
+        <section class="slide" data-slide="6">
+            <div class="slide-content">
+                <h1>技术架构 — 仿生设计</h1>
+                
+                <h2>我们向人脑学习</h2>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>人脑能力</th>
+                            <th>MOYAN技术对应</th>
+                            <th>实现方式</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>五感融合</strong><br>看、听、闻整合成统一认知</td>
+                            <td>多模态融合层</td>
+                            <td>视频、音频、传感器数据实时对齐，形成统一时空线索</td>
+                        </tr>
+                        <tr>
+                            <td><strong>海马体短期记忆</strong><br>暂存当前重要信息</td>
+                            <td>边缘推理 + 缓存</td>
+                            <td>设备端实时缓存，亚秒级提取最近事件</td>
+                        </tr>
+                        <tr>
+                            <td><strong>大脑皮层长期记忆</strong><br>压缩、归档、关联</td>
+                            <td>云端记忆系统</td>
+                            <td>让系统能快速找到相关记忆，就像人回忆往事一样</td>
+                        </tr>
+                        <tr>
+                            <td><strong>前额叶主动决策</strong><br>预判、干预</td>
+                            <td>Guardian守护引擎</td>
+                            <td>实时监控物理指标，主动触发决策，无需人类下达指令</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="card" style="margin-top: 48px; background: var(--color-warm-50);">
+                    <h3>关键指标</h3>
+                    <div class="grid-3">
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">亚秒级</p>
+                            <p class="quiet">主动响应时延</p>
+                        </div>
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">10万级</p>
+                            <p class="quiet">当前支持实体规模</p>
+                        </div>
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">24/7</p>
+                            <p class="quiet">边缘推理无间断</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 7: Killer Feature -->
+        <section class="slide" data-slide="7">
+            <div class="slide-content">
+                <h1>杀手功能 — 亚秒级主动守护</h1>
+                
+                <h2>为什么"亚秒级"是关键门槛？</h2>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>安全场景：老人跌倒</h3>
+                        <p><strong>黄金救援窗口：</strong>4-6分钟</p>
+                        <p class="quiet">✓ 亚秒级识别跌倒姿态<br>
+                        ✓ 立即通知家属/医护<br>
+                        ✓ 争取完整急救窗口</p>
+                        
+                        <p style="margin-top: 24px;"><strong>对比：传统检测</strong></p>
+                        <p class="quiet">❌ 5-30秒判断 → 上传云端 → 分析 → 通知<br>
+                        ❌ 网络波动可能导致更长延迟</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>工业场景：异常震动</h3>
+                        <p><strong>设备故障升级速度：</strong>秒级</p>
+                        <p class="quiet">✓ 实时监测震动频率变化<br>
+                        ✓ 亚秒级触发预警<br>
+                        ✓ 避免产线停摆</p>
+                        
+                        <p style="margin-top: 24px;"><strong>对比：传统监测</strong></p>
+                        <p class="quiet">❌ 分钟级采样 → 批量上传 → 离线分析<br>
+                        ❌ 发现时已造成损失</p>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <div class="card" style="background: var(--color-terracotta); color: white; padding: 48px;">
+                    <h2 style="color: white; text-align: center;">我们的技术壁垒</h2>
+                    <div class="grid-3">
+                        <div>
+                            <h3 style="color: white;">边缘-云端混合架构</h3>
+                            <p style="color: rgba(255,255,255,0.9);">高频判断在边缘<br>长期记忆在云端</p>
+                        </div>
+                        <div>
+                            <h3 style="color: white;">状态机优化</h3>
+                            <p style="color: rgba(255,255,255,0.9);">不依赖大模型实时推理<br>预编译决策树</p>
+                        </div>
+                        <div>
+                            <h3 style="color: white;">C++内核</h3>
+                            <p style="color: rgba(255,255,255,0.9);">极致优化推理性能<br>单核处理多路流</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 8: Product Form -->
+        <section class="slide" data-slide="8">
+            <div class="slide-content">
+                <h1>产品形态 — 双层架构</h1>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <h2>底层：统一基础设施 (MOYAN Core)</h2>
+                        <h3>面向B端硬件厂商</h3>
+                        
+                        <ul class="list-clean">
+                            <li><strong>感知SDK</strong> - 多模态数据接入标准</li>
+                            <li><strong>记忆API</strong> - 云端记忆存储与查询服务</li>
+                            <li><strong>控制网关</strong> - 主动决策触发器</li>
+                        </ul>
+                        
+                        <p class="quiet" style="margin-top: 24px;">
+                            <strong>商业模式：</strong>按设备数量收费，类似Twilio的通信API
+                        </p>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>上层：垂直场景SDK</h2>
+                        <h3>面向特定行业</h3>
+                        
+                        <ul class="list-clean">
+                            <li><strong>智能陪伴SDK</strong> - 养老机器人/宠物陪伴</li>
+                            <li><strong>工业质检SDK</strong> - 产线视觉检测</li>
+                            <li><strong>家庭安全SDK</strong> - 智能摄像头/门锁</li>
+                        </ul>
+                        
+                        <p class="quiet" style="margin-top: 24px;">
+                            <strong>商业模式：</strong>场景包年费 + 数据增值服务
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <h2>为什么采用双层？</h2>
+                <div class="grid-3">
+                    <div class="card" style="border-left: 4px solid var(--color-success);">
+                        <h3>降低集成门槛</h3>
+                        <p class="quiet">硬件厂商无需从零理解AI，只需调用标准API</p>
+                    </div>
+                    
+                    <div class="card" style="border-left: 4px solid var(--color-success);">
+                        <h3>建立飞轮效应</h3>
+                        <p class="quiet">底层数据积累 → 垂直SDK优化 → 吸引更多厂商</p>
+                    </div>
+                    
+                    <div class="card" style="border-left: 4px solid var(--color-success);">
+                        <h3>防御护城河</h3>
+                        <p class="quiet">厂商迁移成本高，数据越多价值越大</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 9: Moats -->
+        <section class="slide" data-slide="9">
+            <div class="slide-content">
+                <h1>竞争壁垒 — 三道护城河</h1>
+                
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <h2>护城河一：独家物理世界数据</h2>
+                        <p>我们相信：当模型能力趋同时，训练数据成为唯一差异化</p>
+                        
+                        <div class="card" style="margin-top: 16px;">
+                            <p><strong>与大厂的区别：</strong></p>
+                            <p class="quiet">• OpenAI/Anthropic：拥有互联网文本数据<br>
+                            • 我们：拥有<strong>摄像头、传感器、机器人交互</strong>的物理世界数据</p>
+                            
+                            <p style="margin-top: 16px;"><strong>数据闭环：</strong></p>
+                            <p class="quiet">客户使用我们的SDK → 产生物理交互数据 → 我们优化模型 → 客户获得更好效果 → 更多客户接入</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h2>护城河二：客户迁移成本</h2>
+                        <div class="card">
+                            <p><strong>一旦客户接入：</strong></p>
+                            <ul class="list-clean">
+                                <li>• 记忆数据已积累(无法迁移)</li>
+                                <li>• 硬件固件已适配(重写成本高)</li>
+                                <li>• 用户体验已形成依赖(更换即降级)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h2>护城河三：边缘推理专利</h2>
+                        <div class="card">
+                            <p><strong>已申请技术专利：</strong></p>
+                            <p class="quiet">• 多模态时空对齐算法<br>
+                            • 边缘-云端混合记忆架构<br>
+                            • 亚秒级主动决策状态机</p>
+                            
+                            <p style="margin-top: 16px;"><span class="badge">专利状态：已提交申请 [占位符：专利号]</span></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 10: Death Traps -->
+        <section class="slide" data-slide="10">
+            <div class="slide-content">
+                <h1>避开死亡陷阱</h1>
+                
+                <div class="grid-3">
+                    <div class="card" style="border-top: 4px solid var(--color-error);">
+                        <h3>陷阱一：被大模型降维打击</h3>
+                        <p class="quiet"><strong>风险：</strong>OpenAI发布物理世界多模态模型</p>
+                        
+                        <div class="divider"></div>
+                        
+                        <p><strong>我们的防御：</strong></p>
+                        <ul class="list-clean list-check">
+                            <li>我们不依赖"模型智能"，而是"数据+架构"</li>
+                            <li>即使OpenAI开源，他们没有我们的物理世界交互数据</li>
+                            <li>边缘推理优化是工程问题，不是模型问题</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card" style="border-top: 4px solid var(--color-error);">
+                        <h3>陷阱二：客户自建系统</h3>
+                        <p class="quiet"><strong>风险：</strong>大厂硬件商自己开发AI能力</p>
+                        
+                        <div class="divider"></div>
+                        
+                        <p><strong>我们的防御：</strong></p>
+                        <ul class="list-clean list-check">
+                            <li>我们提供"即插即用"SDK，开发周期从6个月降到2周</li>
+                            <li>记忆数据跨设备共享，单个厂商无法复制</li>
+                            <li>专注底层，让客户专注应用</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card" style="border-top: 4px solid var(--color-error);">
+                        <h3>陷阱三：陷入低利润代工</h3>
+                        <p class="quiet"><strong>风险：</strong>沦为"AI方案外包商"</p>
+                        
+                        <div class="divider"></div>
+                        
+                        <p><strong>我们的防御：</strong></p>
+                        <ul class="list-clean list-check">
+                            <li>标准化产品，不做定制开发</li>
+                            <li>数据飞轮效应，越用越值钱</li>
+                            <li>订阅制收费，而非一次性项目</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 48px; background: var(--color-moss); color: white; padding: 32px;">
+                    <h3 style="color: white; text-align: center;">核心策略：我们不是AI公司，我们是基础设施公司</h3>
+                    <p style="color: rgba(255,255,255,0.9); text-align: center;">就像AWS不怕软件公司竞争一样，我们的价值在于<strong>平台效应+数据壁垒</strong>，而非单一技术</p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 11: Market Size -->
+        <section class="slide" data-slide="11">
+            <div class="slide-content">
+                <h1>市场规模与时机</h1>
+                
+                <h2>TAM/SAM/SOM分析</h2>
+                
+                <div class="chart-container">
+                    <div style="margin-bottom: 32px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600;">TAM - 全球智能硬件市场</span>
+                            <span class="stat-number" style="font-size: 32px;">[XXX]亿</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 100%;">100%</div>
+                        </div>
+                        <p class="quiet">智能家居 + 工业IoT + 服务机器人 (数据来源：Gartner/IDC)</p>
+                    </div>
+                    
+                    <div style="margin-bottom: 32px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600;">SAM - AI增强型硬件</span>
+                            <span class="stat-number" style="font-size: 32px;">[XX]亿</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 25%;">25%</div>
+                        </div>
+                        <p class="quiet">需要"记忆+主动决策"的设备 (约占智能硬件市场的20-30%)</p>
+                    </div>
+                    
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span style="font-weight: 600;">SOM - 3年内可获市场</span>
+                            <span class="stat-number" style="font-size: 32px;">[X]亿</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 5%;">5%</div>
+                        </div>
+                        <p class="quiet">养老/安防/工业质检 (早期采纳者)</p>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <h2>为什么是现在？</h2>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <h3>技术成熟度</h3>
+                        <ul class="list-clean list-check">
+                            <li>边缘AI芯片性能约3年翻倍(NPU/VPU普及)</li>
+                            <li>多模态大模型已可商用(GPT-4V, Gemini)</li>
+                            <li>5G/WiFi6部署完成，带宽不再是瓶颈</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>市场需求</h3>
+                        <ul class="list-clean list-check">
+                            <li>老龄化加速(2025年中国65岁+人口约占比15%+)</li>
+                            <li>工业自动化升级(劳动力成本约每年上涨8-10%)</li>
+                            <li>消费者愿为"主动智能"支付溢价</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; margin-top: 48px; font-size: 20px; color: var(--color-accent);">
+                    <strong>时间窗口：</strong>我们判断未来2-3年是建立先发优势的关键期
+                </p>
+            </div>
+        </section>
+        
+        <!-- Slide 12: Business Model -->
+        <section class="slide" data-slide="12">
+            <div class="slide-content">
+                <h1>商业模式 — 三阶段演进</h1>
+                
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <h2>第一阶段(现在-12个月)：垂直SDK切入</h2>
+                        <div class="card">
+                            <p><strong>目标客户：</strong>中小硬件厂商(陪伴机器人/智能摄像头)</p>
+                            <p><strong>产品：</strong>智能陪伴SDK + 家庭安全SDK</p>
+                            <p><strong>定价：</strong>¥5,000-20,000/设备/年(基于功能包)</p>
+                            <p><strong>目标：</strong>5家标杆客户，约[XX]台设备</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h2>第二阶段(12-36个月)：扩展场景+底层开放</h2>
+                        <div class="card">
+                            <p><strong>新增场景：</strong>工业质检SDK、智能玩具SDK</p>
+                            <p><strong>开放MOYAN Core API：</strong>让大厂自行开发上层应用</p>
+                            <p><strong>定价：</strong>
+                            <br>• 垂直SDK: ¥3,000-15,000/设备/年(规模降价)
+                            <br>• Core API: ¥0.5-2/设备/月(按调用量)</p>
+                            <p><strong>目标：</strong>30家+客户，10万+设备</p>
+                        </div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <h2>第三阶段(36个月+)：数据增值服务</h2>
+                        <div class="card">
+                            <p><strong>核心变化：</strong>物理世界数据成为核心资产</p>
+                            <p><strong>新业务：</strong>
+                            <br>• 向大模型厂商出售标注数据(脱敏)
+                            <br>• 提供行业洞察报告(如"养老院跌倒风险热力图")
+                            <br>• 训练定制化边缘模型</p>
+                            <p><strong>预期：</strong>数据服务占比约30-40%</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 48px; background: var(--color-warm-50);">
+                    <h3>收入预测(未来3年)</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>年份</th>
+                                <th>客户数</th>
+                                <th>设备数</th>
+                                <th>预计收入</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Year 1</td>
+                                <td>5-10</td>
+                                <td>[XX]</td>
+                                <td>¥[XXX]万</td>
+                            </tr>
+                            <tr>
+                                <td>Year 2</td>
+                                <td>20-30</td>
+                                <td>[XXX]</td>
+                                <td>¥[XXX]万</td>
+                            </tr>
+                            <tr>
+                                <td>Year 3</td>
+                                <td>50+</td>
+                                <td>[XXX]万</td>
+                                <td>¥[XXX]万+</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 13: Dual-Track Strategy -->
+        <section class="slide" data-slide="13">
+            <div class="slide-content">
+                <h1>市场策略 — 双轨并进</h1>
+                
+                <div class="grid-2">
+                    <div class="card" style="border-left: 4px solid var(--color-terracotta);">
+                        <h2>To B Track - 硬件厂商</h2>
+                        
+                        <h3>目标客户画像</h3>
+                        <ul class="list-clean">
+                            <li><strong>规模：</strong>年产[X-XX]万台的中型硬件厂</li>
+                            <li><strong>痛点：</strong>有硬件能力，缺AI团队</li>
+                            <li><strong>预算：</strong>愿意为差异化功能支付溢价</li>
+                        </ul>
+                        
+                        <h3 style="margin-top: 24px;">获客渠道</h3>
+                        <ul class="list-clean list-check">
+                            <li>行业展会(CES, CESA, IFA)</li>
+                            <li>硬件孵化器合作(HAX, Shenzhen Open Innovation Lab)</li>
+                            <li>技术论坛演讲(如"如何让机器人拥有记忆")</li>
+                        </ul>
+                        
+                        <p class="quiet" style="margin-top: 24px;"><strong>首年目标：</strong>签约5家，其中至少2家进入量产</p>
+                    </div>
+                    
+                    <div class="card" style="border-left: 4px solid var(--color-moss);">
+                        <h2>To D Track - 开发者生态</h2>
+                        
+                        <h3>为什么需要开发者？</h3>
+                        <p class="quiet">仅靠我们团队，无法覆盖所有垂直场景<br>
+                        → 需要开发者基于MOYAN Core开发长尾应用</p>
+                        
+                        <h3 style="margin-top: 24px;">生态建设</h3>
+                        <ul class="list-clean list-check">
+                            <li>开源示例SDK(GitHub, 已获[XX] Stars)</li>
+                            <li>开发者文档与教程(类似Stripe的文档体验)</li>
+                            <li>Hackathon赞助(奖金+云服务额度)</li>
+                            <li>收入分成计划(开发者保留60-70%)</li>
+                        </ul>
+                        
+                        <p class="quiet" style="margin-top: 24px;"><strong>首年目标：</strong>[XX]名注册开发者，[X]个第三方SDK</p>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <h2>为什么双轨？</h2>
+                <div class="grid-3">
+                    <div class="card">
+                        <h3>降低依赖</h3>
+                        <p class="quiet">不依赖单一大客户，减少被绑架风险</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>加速覆盖</h3>
+                        <p class="quiet">开发者填补长尾场景，扩大数据采集面</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>品牌建设</h3>
+                        <p class="quiet">开发者社区活跃度提升技术可信度</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 14: Current Progress -->
+        <section class="slide" data-slide="14">
+            <div class="slide-content">
+                <h1>当前进展 — MVP已上线</h1>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <h2>技术里程碑</h2>
+                        <ul class="list-clean list-check">
+                            <li><strong>MVP部署：</strong>智能陪伴SDK已在[X]个测试设备运行</li>
+                            <li><strong>核心指标验证：</strong>
+                                <br>• 主动响应延迟：约[XXX]毫秒
+                                <br>• 记忆查询耗时：约[XX]毫秒
+                                <br>• 边缘推理准确率：约[XX]%
+                            </li>
+                            <li><strong>数据积累：</strong>
+                                <br>• 视频时长：约[XXX]小时
+                                <br>• 标注事件：约[XXX]条
+                                <br>• 用户反馈：约[XX]条
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>商业进展</h2>
+                        <p><span class="badge" style="background: var(--color-success); color: white;">第一笔订单已签约</span></p>
+                        
+                        <p style="margin-top: 16px;"><strong>客户：</strong>[占位符：客户名称/类型，如"某养老陪伴机器人厂商"]</p>
+                        <p><strong>订单金额：</strong>¥[XX]万元</p>
+                        <p><strong>部署规模：</strong>[XX]台设备</p>
+                        <p><strong>合同期：</strong>[X]年</p>
+                        
+                        <h3 style="margin-top: 32px;">客户漏斗</h3>
+                        <table style="margin-top: 16px;">
+                            <thead>
+                                <tr>
+                                    <th>阶段</th>
+                                    <th>公司数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>已接触</td>
+                                    <td>[XX]家</td>
+                                </tr>
+                                <tr>
+                                    <td>技术验证中</td>
+                                    <td>[X]家</td>
+                                </tr>
+                                <tr>
+                                    <td>商务谈判</td>
+                                    <td>[X]家</td>
+                                </tr>
+                                <tr>
+                                    <td>已签约</td>
+                                    <td>1家</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 48px; background: var(--color-warm-50);">
+                    <h3>接下来12个月的关键目标</h3>
+                    <div class="grid-3">
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">5家</p>
+                            <p class="quiet">标杆客户签约</p>
+                        </div>
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">[XX]台</p>
+                            <p class="quiet">设备部署量</p>
+                        </div>
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">¥[XXX]万</p>
+                            <p class="quiet">ARR目标</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 15: Competition Analysis -->
+        <section class="slide" data-slide="15">
+            <div class="slide-content">
+                <h1>竞争分析</h1>
+                
+                <h2>竞争格局：我们的定位</h2>
+                
+                <div class="quadrant-matrix">
+                    <!-- Axes -->
+                    <div class="quadrant-axis vertical"></div>
+                    <div class="quadrant-axis horizontal"></div>
+                    
+                    <!-- Axis Labels -->
+                    <div class="quadrant-label y-axis">通用能力强 ↑</div>
+                    <div class="quadrant-label x-axis">垂直场景深 →</div>
+                    
+                    <!-- Players -->
+                    <div class="quadrant-player competitor" style="top: 15%; left: 25%; transform: translate(-50%, -50%);">
+                        <div style="font-weight: 600;">OpenAI/Anthropic</div>
+                        <div style="font-size: 12px; margin-top: 4px;">通用大模型</div>
+                        <div style="font-size: 11px; color: var(--color-warm-400);">(缺乏物理世界数据)</div>
+                    </div>
+                    
+                    <div class="quadrant-player highlight" style="top: 35%; right: 25%; transform: translate(50%, -50%);">
+                        <div style="font-size: 18px; margin-bottom: 4px;">★ MOYAN</div>
+                        <div style="font-size: 13px;">物理世界基础设施</div>
+                        <div style="font-size: 11px; margin-top: 4px; opacity: 0.9;">独家数据 + 边缘优化</div>
+                    </div>
+                    
+                    <div class="quadrant-player competitor" style="bottom: 20%; left: 20%; transform: translate(-50%, 50%);">
+                        <div style="font-weight: 600;">传统IoT平台</div>
+                        <div style="font-size: 11px; margin-top: 4px; color: var(--color-warm-400);">(无AI能力)</div>
+                    </div>
+                    
+                    <div class="quadrant-player competitor" style="bottom: 25%; right: 22%; transform: translate(50%, 50%);">
+                        <div style="font-weight: 600;">硬件厂商自研</div>
+                        <div style="font-size: 11px; margin-top: 4px; color: var(--color-warm-400);">(开发周期长)</div>
+                    </div>
+                </div>
+                
+                <h2 style="margin-top: 48px;">与主要玩家的差异</h2>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>维度</th>
+                            <th>OpenAI/Anthropic</th>
+                            <th>传统IoT平台</th>
+                            <th>硬件厂商自研</th>
+                            <th class="accent">MOYAN(我们)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>物理世界数据</strong></td>
+                            <td>❌ 无</td>
+                            <td>⚠️ 有但未训练AI</td>
+                            <td>⚠️ 单一场景</td>
+                            <td class="accent">✓ 跨场景积累</td>
+                        </tr>
+                        <tr>
+                            <td><strong>边缘推理优化</strong></td>
+                            <td>⚠️ 主要云端</td>
+                            <td>❌ 无AI</td>
+                            <td>⚠️ 需自研</td>
+                            <td class="accent">✓ 核心能力</td>
+                        </tr>
+                        <tr>
+                            <td><strong>长期记忆</strong></td>
+                            <td>⚠️ 对话级</td>
+                            <td>⚠️ 时序数据库</td>
+                            <td>❌ 未实现</td>
+                            <td class="accent">✓ 仿生架构</td>
+                        </tr>
+                        <tr>
+                            <td><strong>主动决策</strong></td>
+                            <td>❌ 被动响应</td>
+                            <td>⚠️ 简单规则</td>
+                            <td>❌ 未实现</td>
+                            <td class="accent">✓ 亚秒级</td>
+                        </tr>
+                        <tr>
+                            <td><strong>集成难度</strong></td>
+                            <td>⚠️ 需适配</td>
+                            <td>⚠️ 需定制</td>
+                            <td>❌ 6个月+</td>
+                            <td class="accent">✓ 2周即可</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <p style="text-align: center; margin-top: 48px; font-size: 20px; color: var(--color-terracotta);">
+                    <strong>我们的核心差异：</strong>唯一专注"物理世界 + AI"交叉点的基础设施
+                </p>
+            </div>
+        </section>
+        
+        <!-- Slide 16: Core Team -->
+        <section class="slide" data-slide="16">
+            <div class="slide-content">
+                <h1>核心团队</h1>
+                
+                <div class="grid-2">
+                    <div class="card">
+                        <h2>[创始人姓名], CEO</h2>
+                        <p><strong>教育背景：</strong>[占位符：学校+专业]</p>
+                        <p><strong>工作经历：</strong>[占位符：前公司+职位]</p>
+                        <p><strong>创业经验：</strong>[占位符：之前项目+成绩]</p>
+                        
+                        <div class="divider"></div>
+                        
+                        <p class="quiet"><strong>核心能力：</strong>
+                        <br>• [占位符：如"产品设计与用户洞察"]
+                        <br>• [占位符：如"商业拓展与融资"]
+                        <br>• [占位符：如"团队管理"]
+                        </p>
+                    </div>
+                    
+                    <div class="card">
+                        <h2>[技术负责人姓名], CTO</h2>
+                        <p><strong>教育背景：</strong>[占位符：学校+专业]</p>
+                        <p><strong>技术背景：</strong>[占位符：前公司+技术栈]</p>
+                        <p><strong>技术成就：</strong>[占位符：如"主导XX系统架构，支撑XX万QPS"]</p>
+                        
+                        <div class="divider"></div>
+                        
+                        <p class="quiet"><strong>核心能力：</strong>
+                        <br>• [占位符：如"分布式系统架构"]
+                        <br>• [占位符：如"AI模型优化"]
+                        <br>• [占位符：如"边缘计算"]
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="card" style="margin-top: 48px; background: var(--color-warm-50);">
+                    <h3>当前团队构成</h3>
+                    <div class="grid-3">
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">[X]人</p>
+                            <p class="quiet">全职团队规模</p>
+                        </div>
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">[X]</p>
+                            <p class="quiet">核心研发人员</p>
+                        </div>
+                        <div>
+                            <p class="stat-number" style="font-size: 32px;">[X]</p>
+                            <p class="quiet">行业顾问</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <h2>为什么我们能做成？</h2>
+                <div class="grid-3">
+                    <div class="card" style="border-left: 4px solid var(--color-terracotta);">
+                        <h3>技术复合背景</h3>
+                        <p class="quiet">团队同时具备AI、嵌入式、IoT经验，跨领域罕见</p>
+                    </div>
+                    
+                    <div class="card" style="border-left: 4px solid var(--color-terracotta);">
+                        <h3>行业资源</h3>
+                        <p class="quiet">与[X]家硬件厂商有合作关系，快速验证MVP</p>
+                    </div>
+                    
+                    <div class="card" style="border-left: 4px solid var(--color-terracotta);">
+                        <h3>执行力</h3>
+                        <p class="quiet">从想法到MVP仅用[X]个月，已签下第一笔订单</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 17: Funding Requirements -->
+        <section class="slide" data-slide="17">
+            <div class="slide-content">
+                <h1>融资需求</h1>
+                
+                <div class="card" style="background: linear-gradient(135deg, var(--color-terracotta) 0%, var(--color-moss) 100%); color: white; padding: 64px; text-align: center;">
+                    <h2 style="color: white; font-size: 36px;">本轮融资：<span style="font-size: 64px; font-weight: 700;">¥200万</span></h2>
+                    <p style="color: rgba(255,255,255,0.9); font-size: 24px; margin-top: 16px;">天使轮 | 出让股权：[X]% | 估值：¥[XXXX]万(pre-money)</p>
+                </div>
+                
+                <h2 style="margin-top: 48px;">资金用途(12个月)</h2>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th>用途</th>
+                            <th>金额</th>
+                            <th>占比</th>
+                            <th>具体说明</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>研发投入</strong></td>
+                            <td>¥100万</td>
+                            <td>50%</td>
+                            <td>• 招聘[X]名核心工程师<br>• 边缘推理优化<br>• 垂直SDK开发(工业质检/智能玩具)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>市场拓展</strong></td>
+                            <td>¥60万</td>
+                            <td>30%</td>
+                            <td>• 行业展会与会议<br>• 销售团队组建([X]人)<br>• 品牌建设(官网/案例视频)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>云服务与基础设施</strong></td>
+                            <td>¥30万</td>
+                            <td>15%</td>
+                            <td>• 云计算资源(AWS/阿里云)<br>• 数据存储与CDN<br>• 安全与合规认证</td>
+                        </tr>
+                        <tr>
+                            <td><strong>运营费用</strong></td>
+                            <td>¥10万</td>
+                            <td>5%</td>
+                            <td>• 办公场地<br>• 法务与财务<br>• 日常运营</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="chart-container" style="margin-top: 48px;">
+                    <h3>资金分配可视化</h3>
+                    
+                    <div style="margin-top: 24px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>研发投入</span>
+                            <span style="font-weight: 600;">¥100万 (50%)</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 50%; background: var(--color-terracotta);">50%</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>市场拓展</span>
+                            <span style="font-weight: 600;">¥60万 (30%)</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 30%; background: var(--color-moss);">30%</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>云服务与基础设施</span>
+                            <span style="font-weight: 600;">¥30万 (15%)</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 15%; background: var(--color-gold);">15%</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 16px;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <span>运营费用</span>
+                            <span style="font-weight: 600;">¥10万 (5%)</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 5%; background: var(--color-info);">5%</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <h2>12个月后的里程碑</h2>
+                
+                <div class="grid-3">
+                    <div class="card">
+                        <h3>产品指标</h3>
+                        <ul class="list-clean list-check">
+                            <li>3个垂直SDK上线</li>
+                            <li>MOYAN Core API开放</li>
+                            <li>[XX]名注册开发者</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>商业指标</h3>
+                        <ul class="list-clean list-check">
+                            <li>5家标杆客户</li>
+                            <li>[XX]台设备部署</li>
+                            <li>ARR: ¥[XXX-XXX]万</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>数据指标</h3>
+                        <ul class="list-clean list-check">
+                            <li>约[XXX]小时视频数据</li>
+                            <li>约[XX]万条标注事件</li>
+                            <li>约[X]个垂直场景模型</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <p style="text-align: center; margin-top: 48px; font-size: 20px; color: var(--color-graphite-900);">
+                    <strong>达成后估值：</strong>我们预计可支撑¥[XXXX-XXXX]万估值进入A轮
+                </p>
+            </div>
+        </section>
+        
+        <!-- Slide 18: Risk Management -->
+        <section class="slide" data-slide="18">
+            <div class="slide-content">
+                <h1>风险管理</h1>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">风险类型</th>
+                            <th style="width: 35%;">具体风险</th>
+                            <th style="width: 35%;">应对策略</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>技术风险</strong></td>
+                            <td>• 边缘推理性能不达标<br>• 长期记忆扩展性瓶颈</td>
+                            <td>• 已有MVP验证核心指标<br>• 采用渐进式架构(边缘+云端混合)<br>• 有降级方案(纯云端模式)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>市场风险</strong></td>
+                            <td>• 客户采纳速度慢于预期<br>• 硬件厂商更倾向自研</td>
+                            <td>• 已签约第一笔订单，验证需求真实性<br>• 提供"即插即用"SDK，开发周期从6月降到2周<br>• 双轨策略：To B + To D降低依赖</td>
+                        </tr>
+                        <tr>
+                            <td><strong>竞争风险</strong></td>
+                            <td>• 大厂入场(如OpenAI推物理世界模型)<br>• 被现有IoT平台复制</td>
+                            <td>• 专注独家物理世界数据积累<br>• 边缘推理优化需要工程积累，非纯模型<br>• 客户迁移成本高(记忆数据锁定)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>数据安全与合规</strong></td>
+                            <td>• 摄像头数据隐私问题<br>• 跨境数据传输限制</td>
+                            <td>• 本地化部署选项(敏感场景)<br>• 数据脱敏与加密传输<br>• 已申请ISO27001与等保认证</td>
+                        </tr>
+                        <tr>
+                            <td><strong>资金链风险</strong></td>
+                            <td>• 12个月后未达标无法融资<br>• 客户付款周期长</td>
+                            <td>• 轻资产模式，云服务按需付费<br>• 预付费为主的商业条款<br>• 保持18个月现金储备目标</td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="divider"></div>
+                
+                <div class="card" style="background: var(--color-moss); color: white; padding: 32px;">
+                    <h3 style="color: white;">我们的风险管理哲学</h3>
+                    <p style="color: rgba(255,255,255,0.9);">
+                        <strong>1. 技术风险 →</strong> 通过MVP验证，而非纸上谈兵<br>
+                        <strong>2. 市场风险 →</strong> 快速迭代，用真实客户反馈调整<br>
+                        <strong>3. 竞争风险 →</strong> 建立数据飞轮，而非单纯技术领先<br>
+                        <strong>4. 合规风险 →</strong> 提前布局认证，不在法律边缘试探
+                    </p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 19: Vision -->
+        <section class="slide" data-slide="19">
+            <div class="slide-content" style="text-align: center;">
+                <h1>愿景与使命</h1>
+                
+                <div style="margin: 96px auto; max-width: 800px;">
+                    <p class="display" style="color: var(--color-terracotta);">
+                        让每一个物理设备<br>
+                        都拥有感知、记忆与主动智能
+                    </p>
+                </div>
+                
+                <div class="divider"></div>
+                
+                <div class="grid-3" style="margin-top: 64px; text-align: left;">
+                    <div class="card">
+                        <h3>短期(1-2年)</h3>
+                        <p class="quiet">成为AI硬件厂商的首选基础设施<br>
+                        覆盖养老、安防、工业三大场景</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>中期(3-5年)</h3>
+                        <p class="quiet">建立物理世界AI数据标准<br>
+                        开发者生态繁荣，长尾场景爆发</p>
+                    </div>
+                    
+                    <div class="card">
+                        <h3>长期(5年+)</h3>
+                        <p class="quiet">成为物理世界与AI的连接层<br>
+                        就像TCP/IP连接了互联网</p>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 96px;">
+                    <p style="font-size: 24px; color: var(--color-graphite-700); line-height: 1.8;">
+                        我们相信：<br>
+                        <strong>下一代AI的战场不在云端，而在物理世界的每一个角落</strong><br>
+                        谁能让AI"看懂"、"记住"、"主动响应"物理世界，<br>
+                        谁就能定义AI的下一个十年
+                    </p>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Slide 20: Contact -->
+        <section class="slide" data-slide="20">
+            <div class="slide-content" style="text-align: center;">
+                <div class="logo" style="font-size: 48px; margin-bottom: 48px;">MOYAN AI</div>
+                
+                <h1>感谢您的时间</h1>
+                <p class="subtitle">期待与您深入交流</p>
+                
+                <div class="divider"></div>
+                
+                <div style="margin: 64px auto; max-width: 600px;">
+                    <div class="card" style="padding: 48px;">
+                        <h2>联系方式</h2>
+                        
+                        <p style="margin-top: 32px; font-size: 20px; line-height: 2;">
+                            <strong>[创始人姓名]</strong>, CEO<br>
+                            <br>
+                            📱 [手机号码]<br>
+                            📧 [邮箱地址]<br>
+                            🌐 [公司网站]<br>
+                            <br>
+                            📍 [办公地址]
+                        </p>
+                    </div>
+                </div>
+                
+                <p class="quiet" style="margin-top: 48px;">
+                    [占位符：可添加公司Logo、二维码、或其他补充材料]
+                </p>
+            </div>
+        </section>
+        
+        </div>
+    </div>
+    
+    <!-- Navigation -->
+    <div class="nav-buttons">
+        <button class="nav-btn" id="prevBtn" aria-label="Previous slide">
+            <svg viewBox="0 0 24 24">
+                <path d="M15 18l-6-6 6-6"/>
+            </svg>
+        </button>
+        <div class="slide-number" id="slideNumber">1 / 20</div>
+        <button class="nav-btn" id="nextBtn" aria-label="Next slide">
+            <svg viewBox="0 0 24 24">
+                <path d="M9 18l6-6-6-6"/>
+            </svg>
+        </button>
+    </div>
+    
+    <div class="nav-dots" id="navDots"></div>
+    
+    <!-- Scroll indicator -->
+    <div class="scroll-indicator">
+        <div class="scroll-progress" id="scrollProgress"></div>
+    </div>
+    
+    <!-- Scroll to top button -->
+    <button class="scroll-top-btn" id="scrollTopBtn" aria-label="Scroll to top">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 15l-6-6-6 6"/>
+        </svg>
+    </button>
+    
+    <script>
+        // Presentation Controller
+        class Presentation {
+            constructor() {
+                this.slides = document.querySelectorAll('.slide');
+                this.currentSlide = 0;
+                this.totalSlides = this.slides.length;
+                
+                this.init();
+            }
+            
+            init() {
+                this.createNavDots();
+                this.attachEventListeners();
+                this.updateSlideNumber();
+                this.updateNavButtons();
+            }
+            
+            createNavDots() {
+                const navDots = document.getElementById('navDots');
+                this.slides.forEach((_, index) => {
+                    const dot = document.createElement('button');
+                    dot.className = 'nav-dot';
+                    if (index === 0) dot.classList.add('active');
+                    dot.setAttribute('aria-label', `Go to slide ${index + 1}`);
+                    dot.addEventListener('click', () => this.goToSlide(index));
+                    navDots.appendChild(dot);
+                });
+            }
+            
+            attachEventListeners() {
+                document.addEventListener('keydown', (e) => {
+                    switch(e.key) {
+                        case 'ArrowRight':
+                        case ' ':
+                            e.preventDefault();
+                            this.nextSlide();
+                            break;
+                        case 'ArrowLeft':
+                            e.preventDefault();
+                            this.prevSlide();
+                            break;
+                        case 'Home':
+                            e.preventDefault();
+                            this.goToSlide(0);
+                            break;
+                        case 'End':
+                            e.preventDefault();
+                            this.goToSlide(this.totalSlides - 1);
+                            break;
+                    }
+                });
+                
+                // Navigation buttons
+                const prevBtn = document.getElementById('prevBtn');
+                const nextBtn = document.getElementById('nextBtn');
+                
+                prevBtn.addEventListener('click', () => this.prevSlide());
+                nextBtn.addEventListener('click', () => this.nextSlide());
+                
+                // Scroll progress indicator
+                this.slides.forEach(slide => {
+                    slide.addEventListener('scroll', () => {
+                        this.updateScrollProgress(slide);
+                    });
+                });
+                
+                // Scroll to top button
+                const scrollTopBtn = document.getElementById('scrollTopBtn');
+                this.slides.forEach(slide => {
+                    slide.addEventListener('scroll', () => {
+                        if (slide.scrollTop > 200) {
+                            scrollTopBtn.classList.add('visible');
+                        } else {
+                            scrollTopBtn.classList.remove('visible');
+                        }
+                    });
+                });
+                
+                scrollTopBtn.addEventListener('click', () => {
+                    const activeSlide = this.slides[this.currentSlide];
+                    activeSlide.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
+                });
+            }
+            
+            updateScrollProgress(slide) {
+                const scrollProgress = document.getElementById('scrollProgress');
+                const scrollHeight = slide.scrollHeight - slide.clientHeight;
+                const scrollTop = slide.scrollTop;
+                const progress = (scrollTop / scrollHeight) * 100;
+                scrollProgress.style.width = `${Math.min(progress, 100)}%`;
+            }
+            
+            goToSlide(index) {
+                if (index < 0 || index >= this.totalSlides) return;
+                
+                this.slides[this.currentSlide].classList.remove('active');
+                this.currentSlide = index;
+                this.slides[this.currentSlide].classList.add('active');
+                
+                // Reset scroll position
+                this.slides[this.currentSlide].scrollTop = 0;
+                
+                // Reset scroll progress
+                document.getElementById('scrollProgress').style.width = '0%';
+                
+                this.updateNavDots();
+                this.updateSlideNumber();
+                this.updateNavButtons();
+            }
+            
+            nextSlide() {
+                this.goToSlide(this.currentSlide + 1);
+            }
+            
+            prevSlide() {
+                this.goToSlide(this.currentSlide - 1);
+            }
+            
+            updateNavDots() {
+                const dots = document.querySelectorAll('.nav-dot');
+                dots.forEach((dot, index) => {
+                    dot.classList.toggle('active', index === this.currentSlide);
+                });
+            }
+            
+            updateSlideNumber() {
+                document.getElementById('slideNumber').textContent = 
+                    `${this.currentSlide + 1} / ${this.totalSlides}`;
+            }
+            
+            updateNavButtons() {
+                const prevBtn = document.getElementById('prevBtn');
+                const nextBtn = document.getElementById('nextBtn');
+                
+                prevBtn.disabled = this.currentSlide === 0;
+                nextBtn.disabled = this.currentSlide === this.totalSlides - 1;
+            }
+        }
+        
+        // Initialize presentation
+        const presentation = new Presentation();
+    </script>
+</body>
+</html>

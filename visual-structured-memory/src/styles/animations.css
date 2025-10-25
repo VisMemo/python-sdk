@@ -1,0 +1,71 @@
+/**
+ * 静态样式定义 - 学术出版级别
+ * 移除所有动画，专注于静态美学与可读性
+ * 
+ * 设计原则：
+ * - 清晰的视觉层次
+ * - 一致的间距和对齐
+ * - 高对比度（WCAG AA: ≥4.5:1）
+ * - 打印友好
+ */
+
+/* 全局字体配置 */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* SVG 文本优化 */
+svg text {
+  font-feature-settings: 'kern' 1, 'liga' 1;
+  shape-rendering: geometricPrecision;
+}
+
+/* 层次容器 - 静态优化 */
+.layer-container {
+  opacity: 1;
+  transition: none;
+}
+
+/* 连接线 - 移除动画 */
+.connection-line {
+  stroke-dasharray: none;
+  stroke-dashoffset: 0;
+}
+
+/* 打印优化 */
+@media print {
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  
+  svg {
+    page-break-inside: avoid;
+  }
+  
+  /* 确保所有颜色在打印时保留 */
+  rect, circle, path, line, text {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* 高对比度模式适配 */
+@media (prefers-contrast: high) {
+  rect, circle, path, line {
+    stroke-width: 2;
+  }
+  
+  text {
+    font-weight: 500;
+  }
+}
+
+/* 响应式调整 - 保持可读性 */
+@media (max-width: 768px) {
+  svg text {
+    font-size: 110%; /* 小屏幕下轻微放大文字 */
+  }
+}
