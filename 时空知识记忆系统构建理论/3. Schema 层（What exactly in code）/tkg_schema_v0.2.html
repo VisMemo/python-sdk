@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TKG v0.1 & v0.2 Schema 交互式图解</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vis.js for Graph Visualization -->
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .vis-network { outline: none; }
+    </style>
+    <!-- Patch for ResizeObserver loop error -->
+    <script>
+        window.addEventListener('error', function(event) {
+            if (event.message === 'ResizeObserver loop completed with undelivered notifications.' ||
+                event.message === 'ResizeObserver loop limit exceeded') {
+                event.stopImmediatePropagation();
+            }
+        });
+    </script>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <!-- Left Panel: Graph Canvas -->
+    <div class="flex-grow h-1/2 md:h-full relative bg-white border-r border-gray-200 shadow-inner" id="graph-container">
+        <div class="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur p-2 rounded shadow text-xs text-gray-500">
+            <p><i class="ph ph-mouse-left"></i> 点击节点/边查看详情</p>
+            <p><i class="ph ph-hand-grabbing"></i> 拖动调整布局</p>
+            <p><i class="ph ph-magnifying-glass-plus"></i> 滚轮缩放</p>
+        </div>
+        <div id="mynetwork" class="absolute inset-0"></div>
+    </div>
+
+    <!-- Right Panel: Controls & Details -->
+    <div class="w-full md:w-96 h-1/2 md:h-full flex flex-col bg-white shadow-xl z-20">
+        
+        <!-- Header -->
+        <div class="p-6 border-b border-gray-100 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i class="ph ph-graph"></i> TKG Schema 图解
+            </h1>
+            <p class="text-sm opacity-80 mt-1">v0.1 内核 + v0.2 扩展</p>
+        </div>
+
+        <!-- Controls (Story Mode) -->
+        <div class="p-4 bg-gray-50 border-b border-gray-200 overflow-y-auto" style="max-height: 50%;">
+            <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">构建步骤 (Step-by-Step)</h2>
+            <div class="space-y-2">
+                <button onclick="drawLayer(1)" id="btn-layer-1" class="w-full text-left px-4 py-3 rounded-lg border border-blue-200 bg-white hover:bg-blue-50 transition flex items-center gap-3 group">
+                    <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold group-hover:bg-blue-600 group-hover:text-white transition">1</div>
+                    <div>
+                        <div class="font-semibold text-gray-800">物理时间层 (Physical)</div>
+                        <div class="text-xs text-gray-500">v0.1: MediaSegment 时间轴</div>
+                    </div>
+                </button>
+
+                <button onclick="drawLayer(2)" id="btn-layer-2" class="w-full text-left px-4 py-3 rounded-lg border border-green-200 bg-white hover:bg-green-50 transition flex items-center gap-3 group opacity-50 cursor-not-allowed" disabled>
+                    <div class="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center font-bold group-hover:bg-green-600 group-hover:text-white transition">2</div>
+                    <div>
+                        <div class="font-semibold text-gray-800">感知证据层 (Perception)</div>
+                        <div class="text-xs text-gray-500">v0.1: Evidence 检测数据</div>
+                    </div>
+                </button>
+
+                <button onclick="drawLayer(3)" id="btn-layer-3" class="w-full text-left px-4 py-3 rounded-lg border border-purple-200 bg-white hover:bg-purple-50 transition flex items-center gap-3 group opacity-50 cursor-not-allowed" disabled>
+                    <div class="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold group-hover:bg-purple-600 group-hover:text-white transition">3</div>
+                    <div>
+                        <div class="font-semibold text-gray-800">认知逻辑层 (Cognition)</div>
+                        <div class="text-xs text-gray-500">v0.1: Event 与 Entity 聚合</div>
+                    </div>
+                </button>
+
+                 <button onclick="drawLayer(4)" id="btn-layer-4" class="w-full text-left px-4 py-3 rounded-lg border border-red-200 bg-white hover:bg-red-50 transition flex items-center gap-3 group opacity-50 cursor-not-allowed" disabled>
+                    <div class="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold group-hover:bg-red-600 group-hover:text-white transition">4</div>
+                    <div>
+                        <div class="font-semibold text-gray-800">v0.2 扩展层 (Extensions)</div>
+                        <div class="text-xs text-gray-500">因果推理、时序链与共现</div>
+                    </div>
+                </button>
+                
+                <button onclick="resetGraph()" class="w-full text-center text-xs text-gray-400 hover:text-red-500 mt-2 py-1">
+                    <i class="ph ph-arrow-counter-clockwise"></i> 重置演示
+                </button>
+            </div>
+        </div>
+
+        <!-- Node Details Panel -->
+        <div class="flex-grow overflow-y-auto p-6" id="detail-panel">
+            <div class="h-full flex flex-col items-center justify-center text-gray-400 text-center">
+                <i class="ph ph-cursor-click text-4xl mb-2"></i>
+                <p class="text-sm">点击图中的节点或连线<br>查看 Schema 属性详情</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Graph Data & Schema Definition ---
+        
+        const allNodes = [
+            // Layer 1: MediaSegments
+            { id: 's1', label: 'Segment\n10:00:00', group: 'segment', level: 5, title: 'MediaSegment' },
+            { id: 's2', label: 'Segment\n10:00:30', group: 'segment', level: 5, title: 'MediaSegment' },
+            { id: 's3', label: 'Segment\n10:01:00', group: 'segment', level: 5, title: 'MediaSegment' },
+
+            // Layer 2: Evidence
+            { id: 'ev1', label: 'Face\n(Dad)', group: 'evidence', level: 4, shape: 'box', title: 'FaceEvidence' },
+            { id: 'ev2', label: 'Object\n(Cup)', group: 'evidence', level: 4, shape: 'box', title: 'ObjectEvidence' },
+            { id: 'ev3', label: 'ASR\n"Ah!"', group: 'evidence_text', level: 4, shape: 'text', title: 'TextEvidence' },
+            
+            // Layer 3: Entity & Event & Place
+            { id: 'ent1', label: 'Entity\n(Father)', group: 'entity', level: 1, title: 'Entity' },
+            { id: 'ent2', label: 'Entity\n(Mug)', group: 'entity', level: 1, title: 'Entity' },
+            { id: 'place1', label: 'Place\n(Kitchen)', group: 'place', level: 2, title: 'Place' },
+            { id: 'event1', label: 'Event\nDrinks coffee', group: 'event', level: 2, title: 'Event' },
+            { id: 'event2', label: 'Event\nSpills coffee', group: 'event', level: 2, title: 'Event' }
+        ];
+
+        const allEdges = [
+            // Layer 1
+            { from: 's1', to: 's2', label: 'NEXT_SEGMENT', arrows: 'to', color: {color:'#ccc'}, dashes: true },
+            { from: 's2', to: 's3', label: 'NEXT_SEGMENT', arrows: 'to', color: {color:'#ccc'}, dashes: true },
+
+            // Layer 2
+            { from: 's1', to: 'ev1', label: 'CONTAINS', arrows: 'to', color: {color:'#84cc16'} },
+            { from: 's1', to: 'ev2', label: 'CONTAINS', arrows: 'to', color: {color:'#84cc16'} },
+            { from: 's2', to: 'ev3', label: 'CONTAINS', arrows: 'to', color: {color:'#84cc16'} },
+
+            // Layer 3
+            { from: 'ev1', to: 'ent1', label: 'BELONGS_TO', arrows: 'to', color: {color:'#eab308'}, dashes: true },
+            { from: 'ev2', to: 'ent2', label: 'BELONGS_TO', arrows: 'to', color: {color:'#eab308'}, dashes: true },
+
+            { from: 'event1', to: 's1', label: 'SUMMARIZES', arrows: 'to', color: {color:'#a855f7'} },
+            { from: 'event2', to: 's2', label: 'SUMMARIZES', arrows: 'to', color: {color:'#a855f7'} },
+            
+            { from: 'event1', to: 'ent1', label: 'INVOLVES', arrows: 'to', color: {color:'#a855f7'} },
+            { from: 'event1', to: 'ent2', label: 'INVOLVES', arrows: 'to', color: {color:'#a855f7'} },
+            { from: 'event1', to: 'place1', label: 'OCCURS_AT', arrows: 'to', color: {color:'#ef4444'} },
+
+            // Layer 4 (v0.2 Extensions) - Special IDs for edge clicking
+            { id: 'edge_next', from: 'event1', to: 'event2', label: 'NEXT_EVENT\n(v0.2)', arrows: 'to', color: {color:'#dc2626'}, dashes: [5,5], width: 2, title: 'v0.2: Sequence' },
+            { id: 'edge_cause', from: 'event1', to: 'event2', label: 'CAUSES\n(v0.2)', arrows: 'to', color: {color:'#dc2626'}, dashes: [5,5], width: 2, smooth: {type: 'curvedCW', roundness: 0.2}, title: 'v0.2: Causality' },
+            { id: 'edge_co', from: 'ent1', to: 'ent2', label: 'CO_OCCURS_WITH\n(v0.2)', color: {color:'#16a34a'}, dashes: [5,5], width: 2, title: 'v0.2: Co-occurrence' }
+        ];
+
+        // Detailed Metadata
+        const metadata = {
+            'event1': {
+                "type": "Event (v0.1)",
+                "summary": "Father drinking coffee",
+                "desc": "v0.1 核心节点：描述发生了什么。"
+            },
+            'event2': {
+                "type": "Event (v0.1)",
+                "summary": "Coffee spills on table",
+                "desc": "v0.1 核心节点：描述发生了什么。"
+            },
+            'edge_next': {
+                "type": "RELATION: NEXT_EVENT (v0.2)",
+                "properties": { "kind": "observed", "gap_seconds": 30 },
+                "desc": "v0.2 扩展：定义了事件的'叙事顺序'。不仅是时间先后，更是逻辑上的连续。"
+            },
+            'edge_cause': {
+                "type": "RELATION: CAUSES (v0.2)",
+                "properties": { "probability": 0.85, "reason": "action_consequence" },
+                "desc": "v0.2 扩展：AI 推理出的因果关系。'喝水'这个动作导致了'洒了'这个结果。"
+            },
+            'edge_co': {
+                "type": "RELATION: CO_OCCURS_WITH (v0.2)",
+                "properties": { "weight": 52, "last_seen": 1698748000 },
+                "desc": "v0.2 扩展：统计学上的关联。说明 Father 和 Mug 经常一起出现（可能是他的专用杯子）。"
+            }
+        };
+
+        // --- Visualization Setup ---
+        
+        let network;
+        let nodes = new vis.DataSet([]);
+        let edges = new vis.DataSet([]);
+        let currentStep = 0;
+
+        function initNetwork() {
+            var container = document.getElementById('mynetwork');
+            var data = { nodes: nodes, edges: edges };
+            var options = {
+                nodes: {
+                    font: { face: 'Inter', size: 14, color: '#333' },
+                    borderWidth: 2,
+                    shadow: true
+                },
+                edges: {
+                    width: 1.5,
+                    font: { size: 10, align: 'middle' },
+                    smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.5 }
+                },
+                groups: {
+                    segment: { color: { background: '#dbeafe', border: '#2563eb' }, shape: 'box', margin: 10 },
+                    evidence: { color: { background: '#dcfce7', border: '#16a34a' }, shape: 'dot', size: 10 },
+                    evidence_text: { color: { background: '#f0fdf4', border: '#16a34a' }, shape: 'ellipse' },
+                    entity: { color: { background: '#fef9c3', border: '#ca8a04' }, shape: 'dot', size: 25 },
+                    event: { color: { background: '#f3e8ff', border: '#9333ea' }, shape: 'diamond', size: 30 },
+                    place: { color: { background: '#fee2e2', border: '#dc2626' }, shape: 'triangle' }
+                },
+                layout: {
+                    hierarchical: {
+                        direction: 'DU',
+                        sortMethod: 'directed',
+                        levelSeparation: 100,
+                        nodeSpacing: 150
+                    }
+                },
+                physics: { enabled: false },
+                interaction: { hover: true, zoomView: true }
+            };
+            
+            network = new vis.Network(container, data, options);
+
+            network.on("click", function (params) {
+                if (params.nodes.length > 0) {
+                    showDetails(params.nodes[0]);
+                } else if (params.edges.length > 0) {
+                    showDetails(params.edges[0]);
+                }
+            });
+        }
+
+        function drawLayer(step) {
+            if (step <= currentStep) return;
+            
+            let newNodes = [];
+            let newEdges = [];
+
+            if (step === 1) {
+                newNodes = allNodes.filter(n => ['s1', 's2', 's3'].includes(n.id));
+                newEdges = allEdges.filter(e => e.label === 'NEXT_SEGMENT');
+                enableBtn(2); highlightBtn(1);
+            } else if (step === 2) {
+                newNodes = allNodes.filter(n => n.group.startsWith('evidence'));
+                newEdges = allEdges.filter(e => e.label === 'CONTAINS');
+                enableBtn(3); highlightBtn(2);
+            } else if (step === 3) {
+                newNodes = allNodes.filter(n => ['entity', 'event', 'place'].includes(n.group));
+                newEdges = allEdges.filter(e => !['NEXT_SEGMENT', 'CONTAINS', 'NEXT_EVENT\n(v0.2)', 'CAUSES\n(v0.2)', 'CO_OCCURS_WITH\n(v0.2)'].includes(e.label));
+                enableBtn(4); highlightBtn(3);
+            } else if (step === 4) {
+                // v0.2 Extensions Layer
+                newEdges = allEdges.filter(e => ['NEXT_EVENT\n(v0.2)', 'CAUSES\n(v0.2)', 'CO_OCCURS_WITH\n(v0.2)'].includes(e.label));
+                highlightBtn(4);
+            }
+
+            nodes.add(newNodes);
+            edges.add(newEdges);
+            network.fit({ animation: true });
+            currentStep = step;
+        }
+
+        function highlightBtn(step) {
+            document.querySelectorAll(`button[id^="btn-layer"]`).forEach(b => b.classList.remove('ring', 'ring-blue-300'));
+            const btn = document.getElementById(`btn-layer-${step}`);
+            if (btn) btn.classList.add('ring', 'ring-blue-300');
+        }
+
+        function enableBtn(step) {
+            const btn = document.getElementById(`btn-layer-${step}`);
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btn.classList.add('cursor-pointer');
+            }
+        }
+
+        function resetGraph() {
+            nodes.clear();
+            edges.clear();
+            currentStep = 0;
+            [2,3,4].forEach(i => {
+                const btn = document.getElementById(`btn-layer-${i}`);
+                if(btn) { btn.disabled = true; btn.classList.add('opacity-50', 'cursor-not-allowed'); }
+            });
+            highlightBtn(0);
+            document.getElementById('detail-panel').innerHTML = `<div class="h-full flex flex-col items-center justify-center text-gray-400 text-center"><i class="ph ph-cursor-click text-4xl mb-2"></i><p class="text-sm">点击图中的节点或连线<br>查看 Schema 属性详情</p></div>`;
+        }
+
+        function showDetails(id) {
+            const meta = metadata[id] || 
+                         allNodes.find(n => n.id === id) || 
+                         { type: "v0.1 Node", desc: "标准 v0.1 节点。点击 v0.2 的红色/绿色虚线可查看扩展属性。" };
+            
+            const rawJson = JSON.stringify(meta, null, 2);
+            let colorClass = meta.type && meta.type.includes('v0.2') ? "text-red-600" : "text-blue-600";
+            let icon = meta.type && meta.type.includes('v0.2') ? "ph-lightning" : "ph-info";
+
+            const html = `
+                <div class="animate-fade-in">
+                    <div class="flex items-center gap-2 mb-4 pb-2 border-b border-gray-100">
+                        <i class="ph ${icon} text-2xl ${colorClass}"></i>
+                        <div>
+                            <h3 class="font-bold text-lg text-gray-800">${meta.type || meta.group || 'Unknown'}</h3>
+                            <span class="text-xs text-gray-500 font-mono">${id}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-gray-50 p-3 rounded-md mb-4 text-sm text-gray-600 italic border-l-4 ${meta.type && meta.type.includes('v0.2') ? 'border-red-400' : 'border-blue-300'}">
+                        ${meta.desc || "无描述"}
+                    </div>
+
+                    <div class="bg-gray-800 rounded-lg p-4 overflow-x-auto shadow-inner">
+                        <pre class="text-xs text-green-400 font-mono leading-relaxed">${rawJson}</pre>
+                    </div>
+                </div>
+            `;
+            document.getElementById('detail-panel').innerHTML = html;
+        }
+
+        window.onload = initNetwork;
+    </script>
+</body>
+</html>

@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STKG Ultimate Schema - Perfect View</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f8f9fa;
+            color: #333;
+            overflow: hidden;
+        }
+
+        #container {
+            flex: 3;
+            height: 100%;
+            border-right: 1px solid #e9ecef;
+            background-color: #fff;
+            position: relative;
+        }
+
+        #sidebar {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background-color: #f8f9fa;
+            box-shadow: -4px 0 12px rgba(0, 0, 0, 0.03);
+            min-width: 380px;
+            max-width: 480px;
+            height: 100%;
+        }
+
+        #sidebar-header {
+            padding: 20px 24px 10px 24px;
+            border-bottom: 1px solid #e5e7eb;
+            background: #fff;
+            z-index: 10;
+        }
+
+        #sidebar-content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+        }
+
+        /* Layer Controls */
+        .layer-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 15px;
+        }
+
+        .layer-toggle {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f3f4f6;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            user-select: none;
+        }
+
+        .layer-toggle:hover {
+            background: #e5e7eb;
+        }
+
+        .layer-toggle.active {
+            background: #fff;
+            border-color: #3b82f6;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .layer-toggle input {
+            margin-right: 10px;
+        }
+
+        .layer-label {
+            font-weight: 600;
+            font-size: 13px;
+            color: #374151;
+        }
+
+        /* Typography & Cards */
+        h1 {
+            font-size: 20px;
+            margin: 0 0 5px 0;
+            font-weight: 700;
+            color: #111827;
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 0;
+        }
+
+        h2 {
+            font-size: 14px;
+            color: #4b5563;
+            margin: 25px 0 12px 0;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-left: 3px solid #3b82f6;
+            padding-left: 8px;
+        }
+
+        .card {
+            background: white;
+            padding: 14px;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            margin-bottom: 12px;
+            border: 1px solid #e5e7eb;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .card h3 {
+            margin: 0 0 6px 0;
+            font-size: 14px;
+            font-weight: 600;
+            color: #1f2937;
+            display: flex;
+            align-items: center;
+        }
+
+        .card-icon {
+            margin-right: 6px;
+        }
+
+        .card p {
+            font-size: 12px;
+            line-height: 1.5;
+            color: #4b5563;
+            margin: 0 0 6px 0;
+        }
+
+        .query-box {
+            background: #f1f5f9;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 8px;
+            margin-top: 8px;
+        }
+
+        .query-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .query-path {
+            font-family: 'Menlo', monospace;
+            font-size: 11px;
+            color: #059669;
+            word-break: break-all;
+        }
+
+        #network-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 16px 32px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            font-size: 14px;
+            color: #6b7280;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="container">
+        <div id="network-loading">构建终极图谱视图...</div>
+        <div id="mynetwork" style="width: 100%; height: 100%;"></div>
+    </div>
+
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <h1>STKG 终极图谱演示</h1>
+            <p class="subtitle">
+                全分层架构 | 连续时空 | 状态回归<br>
+                <span style="color: #ef4444;">* 拖动节点水平调整，层级高度已锁定</span>
+            </p>
+
+            <div class="layer-controls">
+                <label class="layer-toggle active" style="border-left: 4px solid #64748B;">
+                    <input type="checkbox" checked onchange="toggleLayer(4)">
+                    <span class="layer-label">Layer 4: 推理层 (Inference)</span>
+                </label>
+                <label class="layer-toggle active" style="border-left: 4px solid #F59E0B;">
+                    <input type="checkbox" checked onchange="toggleLayer(3)">
+                    <span class="layer-label">Layer 3: 认知层 (Cognition)</span>
+                </label>
+                <label class="layer-toggle active" style="border-left: 4px solid #22C55E;">
+                    <input type="checkbox" checked onchange="toggleLayer(2)">
+                    <span class="layer-label">Layer 2: 感知层 (Perception)</span>
+                </label>
+                <label class="layer-toggle active" style="border-left: 4px solid #6366F1;">
+                    <input type="checkbox" checked onchange="toggleLayer(1)">
+                    <span class="layer-label">Layer 1: 物理层 (Physical)</span>
+                </label>
+            </div>
+        </div>
+
+        <div id="sidebar-content">
+
+            <h2>核心设计理念 (Core Philosophies)</h2>
+
+            <div class="card">
+                <h3><span class="card-icon">🔑</span>状态回归 (State Reification)</h3>
+                <p><strong>痛点：</strong> 以前查“钥匙在哪”需要回溯历史，慢且易错。</p>
+                <p><strong>方案：</strong> 引入 <code>State</code> 节点。<code>Event</code> 触发 <code>State</code> 流转。查询复杂度降为
+                    O(1)。</p>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">🕸️</span>多粒度时间网格 (Time Mesh)</h3>
+                <p><strong>方案：</strong> <code>TimeSlice</code> 支持嵌套（天 -> 小时 -> 分钟）。</p>
+                <p><strong>价值：</strong> 支持“上个月发生了什么”这种粗粒度快速聚合，无需扫描海量细节。</p>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">🧠</span>记忆经济学 (Memory Economics)</h3>
+                <p><strong>方案：</strong> 动态物化 + TTL 分层。只有重要证据才生成节点，低价值状态自动清理。</p>
+            </div>
+
+            <div class="card">
+                <h3><span class="card-icon">🛡️</span>门控与限流 (Guardrails)</h3>
+                <p><strong>默认：</strong> top-K=5 / conf≥0.6 / TTL=7d（低价值），time_origin=physical/media/logical/predicted，全部带 tenant_id + provenance{source, model_version, prompt_version?, confidence}。</p>
+                <p><strong>意图：</strong> 避免“见啥都入图”，保持查询可控、可审计。</p>
+            </div>
+
+            <h2>当前场景叙事 (Timeline Narrative)</h2>
+
+            <div class="card" style="border-left-color: #6366F1;">
+                <h3>T=0 (10:00) - 入场</h3>
+                <p>父亲进入房间。钥匙静止在桌子上。</p>
+            </div>
+            <div class="card" style="border-left-color: #F59E0B;">
+                <h3>T=1 (10:05) - 交互</h3>
+                <p>父亲拿起钥匙。<strong>状态流转：</strong> Table -> Hand。</p>
+            </div>
+            <div class="card" style="border-left-color: #EF4444;">
+                <h3>T=2 (10:10) - 离场</h3>
+                <p>父亲离开。系统预测他要去开车。</p>
+            </div>
+
+            <h2>复杂查询支持 (Supported Queries)</h2>
+
+            <div class="card">
+                <h3>1. 状态快照查询 (Q7)</h3>
+                <p>“我的车钥匙现在在哪？”</p>
+                <div class="query-box">
+                    <span class="query-label">Cypher Path</span>
+                    <span class="query-path">MATCH (k:Obj)-[:HAS_STATE]->(s:State) RETURN s ORDER BY s.time DESC LIMIT
+                        1</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>2. 跨模态情绪归因 (Q13)</h3>
+                <p>“我焦虑的时候都在做什么？”</p>
+                <div class="query-box">
+                    <span class="query-label">Cypher Path</span>
+                    <span class="query-path">MATCH (s:State {val:'anxious'})<-[:HAS]-(p)-[:INVOLVES]->(e:Event) RETURN
+                            e</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>3. 缺失与否定检测 (Q17)</h3>
+                <p>“上个月哪天我没出门？”</p>
+                <div class="query-box">
+                    <span class="query-label">Logic Path</span>
+                    <span class="query-path">TimeSlice(Month) -> COVERS -> TimeSlice(Day) WHERE NOT
+                        (Day)-[:CONTAINS]->(:Event {loc:'Outdoor'})</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>4. 假设与预测 (Inference)</h3>
+                <p>“接下来可能会发生什么？”</p>
+                <div class="query-box">
+                    <span class="query-label">Cypher Path</span>
+                    <span class="query-path">MATCH (e:Event)-[:PREDICTS]->(h:Hypothesis) WHERE h.conf > 0.8</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Y-Axis Levels (Increased Spacing)
+        // Previous: 280, 120, -80, -250 (Gap ~200)
+        // New: Increase gap to ~250-300 to prevent interference
+        const LEVEL_Y = {
+            4: -350, // Inference (Top)
+            3: -50,  // Cognition
+            2: 250,  // Perception
+            1: 500   // Physical (Bottom)
+        };
+
+        // --- Data Construction ---
+
+        // 1. Physical Layer (Continuous Timeline)
+        const physicalNodes = [
+            // TimeSlices (Hierarchical)
+            { id: 100, layer: 1, label: 'TimeSlice\n(Day: 11-27)', group: 'timeslice', x: 0, y: 650 }, // Parent (day)
+            { id: 101, layer: 1, label: 'TimeSlice\n(Hour: 10:00-11:00)', group: 'timeslice', x: -220, y: 610 }, // Hour
+            { id: 102, layer: 1, label: 'TimeSlice\n(10:00-10:15)', group: 'timeslice', x: -350, y: 560 }, // Minute block
+            { id: 103, layer: 1, label: 'TimeSlice\n(10:15-10:30)', group: 'timeslice', x: -90, y: 560 }, // Minute block
+
+            // MediaSegments (Continuous)
+            { id: 110, layer: 1, label: 'Segment\n(10:00-10:02)', group: 'physical', x: -400 },
+            { id: 111, layer: 1, label: 'Segment\n(10:05-10:07)', group: 'physical', x: -200 },
+            { id: 112, layer: 1, label: 'Segment\n(10:10-10:12)', group: 'physical', x: 0 },
+            { id: 113, layer: 1, label: 'Segment\n(10:15-10:17)', group: 'physical', x: 200 },
+            { id: 114, layer: 1, label: 'Segment\n(10:20-10:22)', group: 'physical', x: 400 }
+        ];
+
+        // 2. Perception Layer (Evidence)
+        const perceptionNodes = [
+            // T=0 (10:00)
+            { id: 201, layer: 2, label: 'Ev: Face\n(Dad)', group: 'evidence', x: -450 },
+            { id: 202, layer: 2, label: 'Ev: Obj\n(Key)', group: 'evidence', x: -350 },
+            // T=1 (10:05)
+            { id: 203, layer: 2, label: 'Ev: Face\n(Dad)', group: 'evidence', x: -250 },
+            { id: 204, layer: 2, label: 'Ev: Action\n(Grab)', group: 'evidence', x: -150 },
+            // T=2 (10:10)
+            { id: 205, layer: 2, label: 'Ev: Face\n(Dad)', group: 'evidence', x: -50 },
+            { id: 206, layer: 2, label: 'Ev: Scene\n(Door)', group: 'evidence', x: 50 },
+            // Text / Utterance Evidence (cross-modal)
+            { id: 207, layer: 2, label: 'TextEvidence\n\"Heading out\"', group: 'text', x: 150 },
+            { id: 208, layer: 2, label: 'Utterance\n\"I\'m leaving\"', group: 'text', x: 250 }
+        ];
+
+        // 3. Cognition Layer (Entities, Events, States)
+        const cognitionNodes = [
+            // Entities (Global)
+            { id: 301, layer: 3, label: 'Entity(Person)\n(Father)', group: 'entity', x: -300, y: -150 },
+            { id: 302, layer: 3, label: 'Object\n(Key, local)', group: 'object', x: 100, y: -150 },
+            { id: 303, layer: 3, label: 'Region\n(Living Room)', group: 'region', x: -30, y: -210 },
+
+            // Events (Sequential)
+            { id: 311, layer: 3, label: 'Event\n(Enter)', group: 'event', x: -400 },
+            { id: 312, layer: 3, label: 'Event\n(Pick Up)', group: 'event', x: -200 },
+            { id: 313, layer: 3, label: 'Event\n(Leave)', group: 'event', x: 0 },
+
+            // States (Evolving)
+            { id: 321, layer: 3, label: 'State\n(Loc: Table)', group: 'state', x: -100, y: 20 },
+            { id: 322, layer: 3, label: 'State\n(Loc: Hand)', group: 'state', x: 100, y: 20 },
+            { id: 323, layer: 3, label: 'State\n(Loc: Outside)', group: 'state', x: 300, y: 20 },
+
+            // Knowledge
+            { id: 350, layer: 3, label: 'Knowledge\n(Fact: Key Habit)', group: 'knowledge', x: 300, y: -150 }
+        ];
+
+        // 4. Inference Layer
+        const inferenceNodes = [
+            { id: 401, layer: 4, label: 'Hypothesis\n(Drive Car)\n[predicted]', group: 'hypothesis', x: 100 },
+            { id: 402, layer: 4, label: 'Pattern\n(Routine)', group: 'hypothesis', x: 300 }
+        ];
+
+        const allNodes = [...physicalNodes, ...perceptionNodes, ...cognitionNodes, ...inferenceNodes].map(n => ({
+            ...n,
+            y: n.y !== undefined ? n.y : LEVEL_Y[n.layer],
+            fixed: { y: true, x: false }
+        }));
+
+        // Edges
+        const allEdges = [
+            // Timeline Flow (Segments)
+            { from: 110, to: 111, label: 'NEXT', arrows: 'to', color: { color: '#aaa', dash: [5, 5] } },
+            { from: 111, to: 112, label: 'NEXT', arrows: 'to', color: { color: '#aaa', dash: [5, 5] } },
+            { from: 112, to: 113, label: 'NEXT', arrows: 'to', color: { color: '#aaa', dash: [5, 5] } },
+            { from: 113, to: 114, label: 'NEXT', arrows: 'to', color: { color: '#aaa', dash: [5, 5] } },
+
+            // TimeSlice Hierarchy
+            { from: 100, to: 101, label: 'CONTAINS', dashes: true },
+            { from: 101, to: 102, label: 'CONTAINS', dashes: true },
+            { from: 101, to: 103, label: 'CONTAINS', dashes: true },
+            { from: 102, to: 103, label: 'NEXT_SLICE', arrows: 'to', dashes: true },
+
+            // Slice -> Segment Coverage
+            { from: 101, to: 110, label: 'COVERS', dashes: true, color: { color: '#ddd' } },
+            { from: 101, to: 111, label: 'COVERS', dashes: true, color: { color: '#ddd' } },
+            { from: 101, to: 112, label: 'COVERS', dashes: true, color: { color: '#ddd' } },
+            { from: 102, to: 113, label: 'COVERS', dashes: true, color: { color: '#ddd' } },
+            { from: 103, to: 114, label: 'COVERS', dashes: true, color: { color: '#ddd' } },
+
+            // Evidence Support (L1 -> L2)
+            { from: 110, to: 201, label: 'CONTAINS' }, { from: 110, to: 202, label: 'CONTAINS' },
+            { from: 111, to: 203, label: 'CONTAINS' }, { from: 111, to: 204, label: 'CONTAINS' },
+            { from: 112, to: 205, label: 'CONTAINS' }, { from: 112, to: 206, label: 'CONTAINS' },
+            { from: 112, to: 207, label: 'CONTAINS' }, { from: 112, to: 208, label: 'CONTAINS' },
+
+            // Event Support (L3 -> L1)
+            { from: 311, to: 110, label: 'SUPPORTED_BY', dashes: true, color: { color: '#cbd5e1' } },
+            { from: 312, to: 111, label: 'SUPPORTED_BY', dashes: true, color: { color: '#cbd5e1' } },
+            { from: 313, to: 112, label: 'SUPPORTED_BY', dashes: true, color: { color: '#cbd5e1' } },
+
+            // Event Flow (L3)
+            { from: 311, to: 312, label: 'NEXT_EVENT', arrows: 'to', width: 2, color: { color: '#EF4444' } },
+            { from: 312, to: 313, label: 'NEXT_EVENT', arrows: 'to', width: 2, color: { color: '#EF4444' } },
+
+            // Entity Involvement
+            { from: 311, to: 301, label: 'INVOLVES' },
+            { from: 312, to: 301, label: 'INVOLVES' }, { from: 312, to: 302, label: 'INVOLVES' },
+            { from: 313, to: 301, label: 'INVOLVES' },
+            { from: 311, to: 303, label: 'OCCURS_AT' },
+            { from: 312, to: 303, label: 'OCCURS_AT' },
+            { from: 313, to: 303, label: 'OCCURS_AT' },
+            { from: 313, to: 102, label: 'OCCURS_AT', dashes: true },
+
+            // State Transitions (The Story)
+            { from: 302, to: 321, label: 'HAS_STATE', arrows: 'to', color: { color: '#F97316' } },
+            { from: 321, to: 322, label: 'TRANSITIONS_TO', arrows: 'to', width: 2, color: { color: '#F97316' } },
+            { from: 322, to: 323, label: 'TRANSITIONS_TO', arrows: 'to', width: 2, color: { color: '#F97316' } },
+            { from: 312, to: 322, label: 'CAUSES', arrows: 'to', dashes: true },
+
+            { from: 301, to: 323, label: 'HAS_STATE', arrows: 'to', color: { color: '#F97316' }, dashes: true },
+
+            // Knowledge
+            { from: 350, to: 302, label: 'DESCRIBES', arrows: 'to' },
+            { from: 350, to: 207, label: 'SUPPORTED_BY', dashes: true, color: { color: '#cbd5e1' } },
+
+            // Spatial containment
+            { from: 303, to: 321, label: 'SPATIALLY_CONTAINS', arrows: 'to', dashes: true },
+
+            // Inference (L3 -> L4)
+            { from: 313, to: 401, label: 'PREDICTS', arrows: 'to', dashes: true },
+            { from: 402, to: 312, label: 'MATCHES', arrows: 'to', dashes: true },
+
+            // Co-occurrence
+            { from: 301, to: 302, label: 'CO_OCCURS_WITH', arrows: 'to', dashes: true, color: { color: '#10b981' } },
+
+            // Utterance bindings: who said what, when
+            { from: 208, to: 301, label: 'SPOKEN_BY', arrows: 'to', color: { color: '#0ea5e9' } },
+            { from: 313, to: 208, label: 'SUPPORTED_BY', dashes: true, color: { color: '#cbd5e1' } }
+        ];
+
+        // Vis.js Setup
+        var nodes = new vis.DataSet(allNodes);
+        var edges = new vis.DataSet(allEdges);
+        var container = document.getElementById('mynetwork');
+        var data = { nodes: nodes, edges: edges };
+        var options = {
+            nodes: {
+                shape: 'dot',
+                size: 20,
+                font: { size: 14, color: '#333', face: 'Segoe UI' },
+                borderWidth: 2,
+                shadow: true
+            },
+            edges: {
+                width: 1.5,
+                smooth: { type: 'cubicBezier', forceDirection: 'vertical', roundness: 0.4 },
+                font: { size: 11, align: 'middle', background: 'white' },
+                color: { color: '#94a3b8' }
+            },
+            groups: {
+                physical: { color: { background: '#E0E7FF', border: '#6366F1' }, shape: 'box' },
+                timeslice: { color: { background: '#F3E8FF', border: '#A855F7' }, shape: 'hexagon' },
+                evidence: { color: { background: '#DCFCE7', border: '#22C55E' }, shape: 'dot', size: 10 },
+                entity: { color: { background: '#FEF3C7', border: '#F59E0B' }, size: 25 },
+                object: { color: { background: '#FFF7ED', border: '#FDBA74' }, shape: 'ellipse', size: 20 },
+                region: { color: { background: '#ECFEFF', border: '#06B6D4' }, shape: 'hexagon', size: 20 },
+                event: { color: { background: '#FEE2E2', border: '#EF4444' }, shape: 'diamond', size: 30 },
+                state: { color: { background: '#FFEDD5', border: '#F97316' }, shape: 'box', size: 16 },
+                knowledge: { color: { background: '#E0F2FE', border: '#0EA5E9' }, shape: 'box' },
+                hypothesis: { color: { background: '#F1F5F9', border: '#64748B' }, shape: 'dot', size: 15, dashes: true },
+                text: { color: { background: '#F8FAFC', border: '#0EA5E9' }, shape: 'box', size: 14 }
+            },
+            physics: { enabled: false }, // Manual layout
+            interaction: { dragNodes: true, zoomView: true, dragView: true, hover: true }
+        };
+
+        var network = new vis.Network(container, data, options);
+        document.getElementById('network-loading').style.display = 'none';
+
+        window.toggleLayer = function (layerNum) {
+            const isChecked = document.querySelector(`input[onchange="toggleLayer(${layerNum})"]`).checked;
+            const nodesInLayer = nodes.get({ filter: item => item.layer === layerNum });
+            nodes.update(nodesInLayer.map(node => ({ id: node.id, hidden: !isChecked })));
+        };
+    </script>
+
+</body>
+
+</html>
