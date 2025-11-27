@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TKG Graph Schema Visualization</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            height: 100vh;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+        #container {
+            flex: 2;
+            height: 100%;
+            border-right: 1px solid #ddd;
+            background-color: #fff;
+            position: relative;
+        }
+        #sidebar {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background-color: #f9f9f9;
+            box-shadow: -2px 0 5px rgba(0,0,0,0.05);
+        }
+        h1 {
+            font-size: 22px;
+            color: #2c3e50;
+            margin-top: 0;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            font-size: 18px;
+            color: #34495e;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 10px;
+            display: inline-block;
+        }
+        .card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+            border-left: 4px solid #3498db;
+        }
+        .card h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #2980b9;
+        }
+        .card p {
+            font-size: 14px;
+            line-height: 1.5;
+            color: #555;
+            margin-bottom: 0;
+        }
+        code {
+            background-color: #eee;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #d35400;
+        }
+        #network-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="container">
+    <div id="network-loading">Loading Graph...</div>
+    <div id="mynetwork" style="width: 100%; height: 100%;"></div>
+</div>
+
+<div id="sidebar">
+    <h1>TKG Schema 交互式图解</h1>
+    <p>基于 <code>TKG-Graph-v0.1-SCHEMA.md</code> 设计的可视化展示。</p>
+    
+    <div class="card" style="border-left-color: #333;">
+        <h3>图例 (Legend)</h3>
+        <div class="legend-item"><span class="dot" style="background-color: #97C2FC;"></span> <strong>MediaSegment</strong>: 媒体片段 (时间锚点)</div>
+        <div class="legend-item"><span class="dot" style="background-color: #7BE141;"></span> <strong>Evidence</strong>: 原始检测证据 (不可变)</div>
+        <div class="legend-item"><span class="dot" style="background-color: #FFC66D;"></span> <strong>Entity</strong>: 聚类身份 (人/物)</div>
+        <div class="legend-item"><span class="dot" style="background-color: #D2B4DE;"></span> <strong>Event</strong>: 逻辑事件 (语义总结)</div>
+        <div class="legend-item"><span class="dot" style="background-color: #FF9999;"></span> <strong>Place</strong>: 空间位置 (可选)</div>
+    </div>
+
+    <h2>核心设计理念</h2>
+    <div class="card">
+        <h3>1. 时间轴为骨架</h3>
+        <p>通过 <code>NEXT_SEGMENT</code> 串联 <code>MediaSegment</code>，构建连续的媒体时间流。所有事实都挂载在时间轴上。</p>
+    </div>
+    <div class="card">
+        <h3>2. 证据与身份分离</h3>
+        <p><code>Evidence</code> 是客观检测结果（只读），<code>Entity</code> 是主观聚类结论（可演化）。通过 <code>BELONGS_TO_ENTITY</code> 动态连接。</p>
+    </div>
+
+    <h2>支持的复杂查询与推理</h2>
+    
+    <div class="card" style="border-left-color: #8e44ad;">
+        <h3>1. 跨模态实体追踪</h3>
+        <p><strong>查询:</strong> "找出 Person A 出现的所有视频片段"</p>
+        <p><strong>路径:</strong> <code>Entity</code> ← <code>Evidence</code> ← <code>MediaSegment</code></p>
+        <p><strong>推理:</strong> 即使 Evidence 是文本或音频，也能回溯到对应的媒体片段。</p>
+    </div>
+
+    <div class="card" style="border-left-color: #e67e22;">
+        <h3>2. 时空因果推理</h3>
+        <p><strong>查询:</strong> "Person A 在 Event X 发生前做了什么？"</p>
+        <p><strong>路径:</strong> <code>Event X</code> → <code>MediaSegment (t1)</code> ...向前追溯... <code>MediaSegment (t0)</code> → <code>Evidence</code> → <code>Entity A</code></p>
+        <p><strong>推理:</strong> 利用 <code>NEXT_SEGMENT</code> 链表和 <code>t_abs_start</code> 属性进行时间排序。</p>
+    </div>
+
+    <div class="card" style="border-left-color: #27ae60;">
+        <h3>3. 共现关系发现</h3>
+        <p><strong>查询:</strong> "谁经常和 Person A 一起出现？"</p>
+        <p><strong>路径:</strong> <code>Entity A</code> ← <code>Evidence</code> ← <code>MediaSegment</code> → <code>Evidence</code> → <code>Entity B</code></p>
+        <p><strong>推理:</strong> 寻找挂载在同一（或相邻）<code>MediaSegment</code> 下的不同实体。</p>
+    </div>
+
+    <div class="card" style="border-left-color: #c0392b;">
+        <h3>4. 事件语义检索</h3>
+        <p><strong>查询:</strong> "厨房里发生了什么？"</p>
+        <p><strong>路径:</strong> <code>Place (厨房)</code> ← <code>Event</code> → <code>MediaSegment</code></p>
+        <p><strong>推理:</strong> 从地点反查事件，再定位到具体视频片段进行回放。</p>
+    </div>
+
+</div>
+
+<script type="text/javascript">
+    // Nodes
+    var nodes = new vis.DataSet([
+        // Media Segments
+        {id: 1, label: 'MediaSegment\n(t=0-10s)', group: 'segment', title: 'id: UUID\ntenant_id: string\nsource_id: string\nt_media_start: 0\nt_media_end: 10'},
+        {id: 2, label: 'MediaSegment\n(t=10-20s)', group: 'segment', title: 'id: UUID\ntenant_id: string\nsource_id: string\nt_media_start: 10\nt_media_end: 20'},
+        {id: 3, label: 'MediaSegment\n(t=20-30s)', group: 'segment', title: 'id: UUID\ntenant_id: string\nsource_id: string\nt_media_start: 20\nt_media_end: 30'},
+
+        // Evidence
+        {id: 11, label: 'FaceEvidence\n(Person A)', group: 'evidence', title: 'id: UUID\nalgorithm: face-det-v1\nbbox: [x,y,w,h]'},
+        {id: 12, label: 'ObjectEvidence\n(Cup)', group: 'evidence', title: 'id: UUID\nalgorithm: yolov8\nconfidence: 0.9'},
+        {id: 13, label: 'VoiceEvidence\n(Person A)', group: 'evidence', title: 'id: UUID\nmodality: audio'},
+        {id: 14, label: 'TextEvidence\n("Hello")', group: 'evidence', title: 'id: UUID\ntext: "Hello"\nutterance_id: ...'},
+
+        // Entities
+        {id: 21, label: 'Entity\n(Person A)', group: 'entity', title: 'id: UUID\ntype: PERSON\ncluster_label: "John Doe"'},
+        {id: 22, label: 'Entity\n(Cup Object)', group: 'entity', title: 'id: UUID\ntype: OBJECT'},
+
+        // Events
+        {id: 31, label: 'Event\n("Drinking Water")', group: 'event', title: 'id: UUID\nsummary: "Man drinking water"\nt_abs_start: ...'},
+
+        // Places
+        {id: 41, label: 'Place\n("Kitchen")', group: 'place', title: 'id: UUID\nname: "Kitchen"'}
+    ]);
+
+    // Edges
+    var edges = new vis.DataSet([
+        // NEXT_SEGMENT
+        {from: 1, to: 2, label: 'NEXT_SEGMENT', arrows: 'to', color: {color:'#848484'}},
+        {from: 2, to: 3, label: 'NEXT_SEGMENT', arrows: 'to', color: {color:'#848484'}},
+
+        // CONTAINS_EVIDENCE
+        {from: 1, to: 11, label: 'CONTAINS', arrows: 'to', dashes: true},
+        {from: 1, to: 12, label: 'CONTAINS', arrows: 'to', dashes: true},
+        {from: 2, to: 13, label: 'CONTAINS', arrows: 'to', dashes: true},
+        {from: 2, to: 14, label: 'CONTAINS', arrows: 'to', dashes: true},
+
+        // BELONGS_TO_ENTITY
+        {from: 11, to: 21, label: 'BELONGS_TO', arrows: 'to'}, // Face -> Person A
+        {from: 13, to: 21, label: 'BELONGS_TO', arrows: 'to'}, // Voice -> Person A
+        {from: 12, to: 22, label: 'BELONGS_TO', arrows: 'to'}, // Cup -> Cup Object
+
+        // SUMMARIZES
+        {from: 31, to: 1, label: 'SUMMARIZES', arrows: 'to', color: {color:'purple'}},
+        {from: 31, to: 2, label: 'SUMMARIZES', arrows: 'to', color: {color:'purple'}},
+
+        // INVOLVES
+        {from: 21, to: 31, label: 'INVOLVES\n{role: actor}', arrows: 'to', font: {align: 'middle'}},
+        {from: 22, to: 31, label: 'INVOLVES\n{role: object}', arrows: 'to', font: {align: 'middle'}},
+
+        // OCCURS_AT
+        {from: 31, to: 41, label: 'OCCURS_AT', arrows: 'to'}
+    ]);
+
+    // Configuration
+    var container = document.getElementById('mynetwork');
+    var data = {
+        nodes: nodes,
+        edges: edges
+    };
+    var options = {
+        nodes: {
+            shape: 'dot',
+            size: 20,
+            font: {
+                size: 14,
+                color: '#333'
+            },
+            borderWidth: 2
+        },
+        edges: {
+            width: 2,
+            smooth: {
+                type: 'cubicBezier',
+                forceDirection: 'vertical',
+                roundness: 0.4
+            }
+        },
+        groups: {
+            segment: {color: {background:'#97C2FC', border:'#2B7CE9'}, shape: 'box'},
+            evidence: {color: {background:'#7BE141', border:'#41A906'}},
+            entity: {color: {background:'#FFC66D', border:'#E39600'}, size: 25},
+            event: {color: {background:'#D2B4DE', border:'#AC58FA'}, shape: 'diamond', size: 25},
+            place: {color: {background:'#FF9999', border:'#FA5858'}, shape: 'triangle'}
+        },
+        layout: {
+            hierarchical: {
+                direction: 'UD', // Up-Down direction
+                sortMethod: 'directed',
+                levelSeparation: 120,
+                nodeSpacing: 150
+            }
+        },
+        physics: {
+            hierarchicalRepulsion: {
+                nodeDistance: 150
+            }
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200
+        }
+    };
+
+    var network = new vis.Network(container, data, options);
+    
+    document.getElementById('network-loading').style.display = 'none';
+
+    // Add interactivity: Click to show details in console or alert (optional)
+    network.on("click", function (params) {
+        if (params.nodes.length > 0) {
+            var nodeId = params.nodes[0];
+            var node = nodes.get(nodeId);
+            console.log("Clicked node:", node);
+        }
+    });
+</script>
+
+</body>
+</html>

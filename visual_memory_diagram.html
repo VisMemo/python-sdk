@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视觉结构化记忆 · 科研模式图</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap"
+        rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #f8f9fc;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --text-tertiary: #94a3b8;
+
+            --col-1-primary: #0ea5e9;
+            /* Sky Blue */
+            --col-1-bg: #e0f2fe;
+            --col-1-border: #bae6fd;
+
+            --col-2-primary: #f59e0b;
+            /* Amber */
+            --col-2-bg: #fef3c7;
+            --col-2-border: #fde68a;
+
+            --col-3-primary: #ec4899;
+            /* Pink */
+            --col-3-bg: #fce7f3;
+            --col-3-border: #fbcfe8;
+
+            --card-bg: rgba(255, 255, 255, 0.9);
+            --glass-border: 1px solid rgba(255, 255, 255, 0.6);
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(at 0% 0%, rgba(14, 165, 233, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(236, 72, 153, 0.1) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(245, 158, 11, 0.1) 0px, transparent 50%);
+            color: var(--text-primary);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 40px;
+        }
+
+        .container {
+            max-width: 1600px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            background: linear-gradient(to right, #0f172a, #334155);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.02em;
+        }
+
+        header p {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .diagram-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr auto 1fr;
+            gap: 20px;
+            align-items: stretch;
+        }
+
+        /* Column Styles */
+        .column {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            box-shadow: var(--shadow-lg);
+            backdrop-filter: blur(12px);
+            border: var(--glass-border);
+            position: relative;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .column:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+
+        .col-header {
+            border-bottom: 2px solid;
+            padding-bottom: 16px;
+            margin-bottom: 8px;
+        }
+
+        .col-header h2 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .col-header span {
+            font-size: 0.9rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.8;
+        }
+
+        .col-header p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Specific Column Themes */
+        .perception {
+            border-top: 6px solid var(--col-1-primary);
+        }
+
+        .perception .col-header h2 {
+            color: var(--col-1-primary);
+        }
+
+        .perception .col-header {
+            border-color: var(--col-1-bg);
+        }
+
+        .relational {
+            border-top: 6px solid var(--col-2-primary);
+        }
+
+        .relational .col-header h2 {
+            color: var(--col-2-primary);
+        }
+
+        .relational .col-header {
+            border-color: var(--col-2-bg);
+        }
+
+        .reasoning {
+            border-top: 6px solid var(--col-3-primary);
+        }
+
+        .reasoning .col-header h2 {
+            color: var(--col-3-primary);
+        }
+
+        .reasoning .col-header {
+            border-color: var(--col-3-bg);
+        }
+
+        /* Modules inside columns */
+        .module {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius-md);
+            padding: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .module-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .module-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-tertiary);
+            font-weight: 400;
+        }
+
+        /* Visual Input Stream */
+        .stream-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--col-1-bg);
+            padding: 12px;
+            border-radius: var(--radius-sm);
+        }
+
+        .camera-icon {
+            font-size: 24px;
+            color: var(--col-1-primary);
+            background: #fff;
+            padding: 8px;
+            border-radius: 50%;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .frames {
+            display: flex;
+            gap: 8px;
+            flex: 1;
+        }
+
+        .frame {
+            flex: 1;
+            aspect-ratio: 16/9;
+            background: #fff;
+            border: 1px solid var(--col-1-border);
+            border-radius: 4px;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.6rem;
+            color: var(--col-1-primary);
+        }
+
+        .frame::after {
+            content: '';
+            position: absolute;
+            inset: 2px;
+            border: 1px dashed var(--col-1-border);
+            border-radius: 2px;
+        }
+
+        /* Object Slots */
+        .slots-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .slot-card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: var(--radius-sm);
+            padding: 10px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .slot-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 14px;
+        }
+
+        .slot-person .slot-icon {
+            background: #3b82f6;
+        }
+
+        .slot-object .slot-icon {
+            background: #f59e0b;
+        }
+
+        .slot-scene .slot-icon {
+            background: #10b981;
+        }
+
+        .slot-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .slot-conf {
+            font-size: 0.65rem;
+            color: var(--text-secondary);
+            background: #f1f5f9;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Feature List */
+        .feature-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .feature-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            padding: 8px;
+            background: #f8fafc;
+            border-radius: 6px;
+        }
+
+        .feature-item i {
+            color: var(--col-1-primary);
+        }
+
+        /* Triples */
+        .triples-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .triple-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #fff;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid var(--col-2-bg);
+            font-size: 0.8rem;
+        }
+
+        .triple-tag {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #fff;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        .tag-blue {
+            background: #3b82f6;
+        }
+
+        .tag-yellow {
+            background: #f59e0b;
+        }
+
+        .tag-pink {
+            background: #ec4899;
+        }
+
+        .tag-green {
+            background: #10b981;
+        }
+
+        .tag-purple {
+            background: #8b5cf6;
+        }
+
+        .triple-content {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            justify-content: space-between;
+            color: var(--text-primary);
+        }
+
+        .triple-rel {
+            color: var(--text-tertiary);
+            font-style: italic;
+            font-size: 0.75rem;
+        }
+
+        /* Scene Graph */
+        .scene-graph-viz {
+            height: 180px;
+            background: var(--col-2-bg);
+            border-radius: var(--radius-sm);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sg-node {
+            position: absolute;
+            background: #fff;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            box-shadow: var(--shadow-sm);
+            border: 2px solid var(--col-2-primary);
+            z-index: 2;
+        }
+
+        .sg-line {
+            position: absolute;
+            height: 2px;
+            background: var(--col-2-border);
+            z-index: 1;
+            transform-origin: left center;
+        }
+
+        /* Hardcoded positions for visual demo */
+        .node-a {
+            top: 30px;
+            left: 40px;
+        }
+
+        .node-b {
+            top: 30px;
+            right: 40px;
+        }
+
+        .node-cup {
+            top: 90px;
+            left: 80px;
+            border-color: #f59e0b;
+        }
+
+        .node-table {
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-color: #ec4899;
+        }
+
+        /* Memory Graph */
+        .memory-chain {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 0;
+            position: relative;
+        }
+
+        .memory-chain::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background: #e2e8f0;
+            z-index: 0;
+        }
+
+        .event-node {
+            width: 60px;
+            height: 60px;
+            background: #fff;
+            border: 2px solid var(--col-3-primary);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+            box-shadow: var(--shadow-md);
+        }
+
+        .event-id {
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--col-3-primary);
+        }
+
+        .event-label {
+            font-size: 0.6rem;
+            color: var(--text-secondary);
+        }
+
+        /* Reasoning Queries */
+        .query-box {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .query-item {
+            flex: 1;
+            background: var(--col-3-bg);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .query-icon {
+            color: var(--col-3-primary);
+            font-size: 1.2rem;
+            margin-bottom: 4px;
+        }
+
+        .query-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--col-3-primary);
+        }
+
+        .query-desc {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+        }
+
+        /* Dynamic Weight */
+        .weight-viz {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .weight-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .weight-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+
+        .icon-hit {
+            background: #10b981;
+        }
+
+        .icon-decay {
+            background: #f59e0b;
+        }
+
+        .weight-bar-container {
+            flex: 1;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .weight-bar {
+            height: 100%;
+            border-radius: 4px;
+        }
+
+        .bar-hit {
+            width: 80%;
+            background: #10b981;
+        }
+
+        .bar-decay {
+            width: 40%;
+            background: #f59e0b;
+        }
+
+        .weight-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            width: 60px;
+            text-align: right;
+        }
+
+        /* Arrows Column */
+        .arrow-col {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 60px;
+            position: relative;
+        }
+
+        .flow-arrow {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 40px 0;
+            position: relative;
+            width: 100%;
+        }
+
+        .arrow-line {
+            height: 2px;
+            width: 100%;
+            background: #cbd5e1;
+            position: relative;
+        }
+
+        .arrow-line::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: -4px;
+            border-width: 5px 0 5px 8px;
+            border-style: solid;
+            border-color: transparent transparent transparent #cbd5e1;
+        }
+
+        .arrow-label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            background: var(--bg-color);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            white-space: nowrap;
+            position: absolute;
+            top: -10px;
+            z-index: 2;
+        }
+
+        /* Footer */
+        .footer-legend {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .legend-bar {
+            width: 4px;
+            height: 24px;
+            border-radius: 2px;
+        }
+
+        .legend-text h4 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .legend-text p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .diagram-grid {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .arrow-col {
+                width: 100%;
+                height: 40px;
+                flex-direction: row;
+                justify-content: space-around;
+            }
+
+            .flow-arrow {
+                width: 40%;
+                margin: 0;
+                transform: rotate(90deg);
+            }
+
+            .arrow-label {
+                transform: rotate(-90deg);
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <header>
+            <h1>视觉结构化记忆 · 科研模式图</h1>
+            <p>Visual Structured Memory: From "Seeing" to "Remembering a World"</p>
+        </header>
+
+        <main class="diagram-grid">
+
+            <!-- COLUMN 1: PERCEPTION -->
+            <section class="column perception">
+                <div class="col-header">
+                    <h2><i class="ri-eye-line"></i> 感知 Perception</h2>
+                    <p>Visual Input & Feature Extraction</p>
+                </div>
+
+                <!-- Module 1 -->
+                <div class="module">
+                    <div class="module-title">
+                        视觉输入层 <span class="module-subtitle">Visual Input Stream</span>
+                    </div>
+                    <div class="stream-container">
+                        <div class="camera-icon"><i class="ri-camera-lens-line"></i></div>
+                        <div class="frames">
+                            <div class="frame">t-1</div>
+                            <div class="frame" style="border-width: 2px; border-color: var(--col-1-primary);">t</div>
+                            <div class="frame">t+1</div>
+                        </div>
+                        <div style="font-size: 0.65rem; color: var(--text-tertiary);">
+                            1920x1080<br>30 FPS
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Module 2 -->
+                <div class="module">
+                    <div class="module-title">
+                        对象检测与分割 <span class="module-subtitle">Detection & Segmentation</span>
+                    </div>
+                    <div class="slots-grid">
+                        <div class="slot-card slot-person">
+                            <div class="slot-icon"><i class="ri-user-line"></i></div>
+                            <div class="slot-label">Person</div>
+                            <div class="slot-conf">94%</div>
+                        </div>
+                        <div class="slot-card slot-object">
+                            <div class="slot-icon"><i class="ri-box-3-line"></i></div>
+                            <div class="slot-label">Object</div>
+                            <div class="slot-conf">87%</div>
+                        </div>
+                        <div class="slot-card slot-scene">
+                            <div class="slot-icon"><i class="ri-landscape-line"></i></div>
+                            <div class="slot-label">Scene</div>
+                            <div class="slot-conf">92%</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Module 3 -->
+                <div class="module">
+                    <div class="module-title">
+                        多模态特征提取 <span class="module-subtitle">Multimodal Features</span>
+                    </div>
+                    <div class="feature-list">
+                        <div class="feature-item"><i class="ri-time-line"></i> 时间戳 (Timestamp: t_i)</div>
+                        <div class="feature-item"><i class="ri-map-pin-line"></i> 空间坐标 (Position: x, y, z)</div>
+                        <div class="feature-item"><i class="ri-compass-3-line"></i> 视角方向 (Viewpoint: θ, φ)</div>
+                        <div class="feature-item"><i class="ri-cpu-line"></i> 嵌入向量 (Embedding: R^d)</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ARROW COL 1 -->
+            <div class="arrow-col">
+                <div class="flow-arrow">
+                    <div class="arrow-label">对象特征</div>
+                    <div class="arrow-line"></div>
+                </div>
+                <div class="flow-arrow">
+                    <div class="arrow-label">时空上下文</div>
+                    <div class="arrow-line"></div>
+                </div>
+            </div>
+
+            <!-- COLUMN 2: RELATIONAL -->
+            <section class="column relational">
+                <div class="col-header">
+                    <h2><i class="ri-links-line"></i> 关系 Relational</h2>
+                    <p>Predicate Triples & Scene Graph</p>
+                </div>
+
+                <!-- Module 1 -->
+                <div class="module">
+                    <div class="module-title">
+                        谓词化关系表达 <span class="module-subtitle">Predicate Triples (S, P, O)</span>
+                    </div>
+                    <div class="triples-list">
+                        <div class="triple-row">
+                            <span class="triple-tag tag-blue">Agent-Obj</span>
+                            <div class="triple-content">
+                                <span>Person_A</span>
+                                <span class="triple-rel"><i class="ri-arrow-right-line"></i> holds <i
+                                        class="ri-arrow-right-line"></i></span>
+                                <span>Cup</span>
+                            </div>
+                        </div>
+                        <div class="triple-row">
+                            <span class="triple-tag tag-yellow">Agent-Loc</span>
+                            <div class="triple-content">
+                                <span>Person_B</span>
+                                <span class="triple-rel"><i class="ri-arrow-right-line"></i> sits_on <i
+                                        class="ri-arrow-right-line"></i></span>
+                                <span>Sofa</span>
+                            </div>
+                        </div>
+                        <div class="triple-row">
+                            <span class="triple-tag tag-pink">Spatial</span>
+                            <div class="triple-content">
+                                <span>Cup</span>
+                                <span class="triple-rel"><i class="ri-arrow-right-line"></i> on_top <i
+                                        class="ri-arrow-right-line"></i></span>
+                                <span>Table</span>
+                            </div>
+                        </div>
+                        <div class="triple-row">
+                            <span class="triple-tag tag-green">Social</span>
+                            <div class="triple-content">
+                                <span>Person_A</span>
+                                <span class="triple-rel"><i class="ri-arrow-right-line"></i> talks_to <i
+                                        class="ri-arrow-right-line"></i></span>
+                                <span>Person_B</span>
+                            </div>
+                        </div>
+                        <div class="triple-row">
+                            <span class="triple-tag tag-purple">Temporal</span>
+                            <div class="triple-content">
+                                <span>Event_1</span>
+                                <span class="triple-rel"><i class="ri-arrow-right-line"></i> before <i
+                                        class="ri-arrow-right-line"></i></span>
+                                <span>Event_2</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Module 2 -->
+                <div class="module">
+                    <div class="module-title">
+                        场景图结构 <span class="module-subtitle">Scene Graph (Who-Where-What)</span>
+                    </div>
+                    <div class="scene-graph-viz">
+                        <!-- Simplified Visual Representation -->
+                        <div class="sg-node node-a">Person_A</div>
+                        <div class="sg-node node-b">Person_B</div>
+                        <div class="sg-node node-cup">Cup</div>
+                        <div class="sg-node node-table">Table</div>
+
+                        <!-- Lines (CSS drawing) -->
+                        <div class="sg-line" style="top: 45px; left: 100px; width: 140px; transform: rotate(0deg);">
+                        </div> <!-- A-B -->
+                        <div class="sg-line" style="top: 65px; left: 70px; width: 60px; transform: rotate(45deg);">
+                        </div> <!-- A-Cup -->
+                        <div class="sg-line" style="top: 120px; left: 110px; width: 60px; transform: rotate(45deg);">
+                        </div> <!-- Cup-Table -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ARROW COL 2 -->
+            <div class="arrow-col">
+                <div class="flow-arrow">
+                    <div class="arrow-label">场景图</div>
+                    <div class="arrow-line"></div>
+                </div>
+                <div class="flow-arrow">
+                    <div class="arrow-label">事件序列</div>
+                    <div class="arrow-line"></div>
+                </div>
+            </div>
+
+            <!-- COLUMN 3: REASONING -->
+            <section class="column reasoning">
+                <div class="col-header">
+                    <h2><i class="ri-brain-line"></i> 推理 Reasoning</h2>
+                    <p>Episodic Memory & Inference</p>
+                </div>
+
+                <!-- Module 1 -->
+                <div class="module">
+                    <div class="module-title">
+                        情节记忆图 <span class="module-subtitle">Episodic Memory Graph</span>
+                    </div>
+                    <div class="memory-chain">
+                        <div class="event-node">
+                            <span class="event-id">E1</span>
+                            <span class="event-label">Event</span>
+                        </div>
+                        <i class="ri-arrow-right-double-line" style="color: var(--text-tertiary);"></i>
+                        <div class="event-node">
+                            <span class="event-id">E2</span>
+                            <span class="event-label">Event</span>
+                        </div>
+                        <i class="ri-arrow-right-double-line" style="color: var(--text-tertiary);"></i>
+                        <div class="event-node">
+                            <span class="event-id">E3</span>
+                            <span class="event-label">Event</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Module 2 -->
+                <div class="module">
+                    <div class="module-title">
+                        推理查询 <span class="module-subtitle">Reasoning Queries</span>
+                    </div>
+                    <div class="query-box">
+                        <div class="query-item">
+                            <div class="query-icon"><i class="ri-question-answer-line"></i></div>
+                            <div class="query-title">Why</div>
+                            <div class="query-desc">因果推理 (Causal)</div>
+                        </div>
+                        <div class="query-item">
+                            <div class="query-icon"><i class="ri-share-forward-line"></i></div>
+                            <div class="query-title">Next</div>
+                            <div class="query-desc">预测推理 (Predict)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Module 3 -->
+                <div class="module">
+                    <div class="module-title">
+                        动态权重强化 <span class="module-subtitle">Dynamic Weight Reinforcement</span>
+                    </div>
+                    <div class="weight-viz">
+                        <div class="weight-row">
+                            <div class="weight-icon icon-hit"><i class="ri-flashlight-fill"></i></div>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar bar-hit"></div>
+                            </div>
+                            <div class="weight-label">Query Hit</div>
+                        </div>
+                        <div class="weight-row">
+                            <div class="weight-icon icon-decay"><i class="ri-history-line"></i></div>
+                            <div class="weight-bar-container">
+                                <div class="weight-bar bar-decay"></div>
+                            </div>
+                            <div class="weight-label">Time Decay</div>
+                        </div>
+                        <div style="font-size: 0.7rem; color: var(--text-secondary); margin-top: 4px;">
+                            <i class="ri-checkbox-circle-fill" style="color: #10b981;"></i> 命中/反馈成功 → 权重增强<br>
+                            <i class="ri-indeterminate-circle-fill" style="color: #f59e0b;"></i> 长期未使用/冲突 → 权重衰减
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <footer class="footer-legend">
+            <div class="legend-item">
+                <div class="legend-bar" style="background: var(--col-1-primary);"></div>
+                <div class="legend-text">
+                    <h4>系统对比</h4>
+                    <p>传统文本记忆：被动存储 → 关键词检索</p>
+                </div>
+            </div>
+            <div class="legend-item">
+                <div class="legend-bar" style="background: var(--col-3-primary);"></div>
+                <div class="legend-text">
+                    <h4>视觉结构化记忆</h4>
+                    <p>主动感知 → 场景图 → 情节记忆 → 推理强化</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+</body>
+
+</html>
