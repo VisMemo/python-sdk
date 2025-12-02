@@ -16,6 +16,13 @@
 
 基于 `TKG-Graph` 的演进路线，我们将能力划分为 5 个等级，每个等级对应特定的测试数据集与评价指标。
 
+在进入 L1-L5 之前，需要特别指出两项 **底层支撑能力**，它们贯穿所有等级：
+
+- **身份统一（Identity Unification）**：在多账号、多设备、多别名的条件下，将同一真实人物/实体在不同源中的记录统一到一致的“自我”视角，避免“把别人的事当成我的事”或相反。
+- **物理时间轴锚定（Physical Timeline Anchoring）**：在时区不一致、设备时间偏移、叙事时间（“刚才”“上周”）混杂的情况下，将所有事件准确地对齐到一条全局物理时间轴上。
+
+这两项能力是 MOYAN 的核心结构优势，既影响 L1 基础检索的正确性，也直接决定 L2-L5 时序推理与否定逻辑判断的上限，因此在后续指标体系中会单独定义评测方案。
+
 ### L1: 基础事实检索 (Basic Fact Retrieval)
 *   **定义**：基于关键词、时间范围、地点或实体的直接查找。
 *   **典型问题**：
@@ -164,19 +171,80 @@
     *   定义：在 Ground Truth 明确为“无对应事件”的情况下，系统仍编造事件或事实的比例。
     *   目标：MOYAN 在该指标上显著低于纯向量 RAG / 一般 GraphRAG。
 
+#### 3.5.5 身份统一与实体对齐指标（Identity Unification）
+
+身份统一是支撑“以我为中心”视角的基础能力，用于衡量系统在多源、多账号、多别名下是否能够正确绑定同一真实实体。
+
+1. **离线实体对齐评测**
+
+*   **数据构造**：
+    *   构造包含多设备、多账号、多别名的事件流，例如：
+        *   `{"participants": ["老王"]}`, `{"participants": ["王强"]}`, `{"participants": ["wang.qiang"]}` 实际指向同一人；
+        *   混入若干真正不同的人名，增加干扰。
+    *   手工标注真实实体 ID（Gold Entity ID），形成标准实体簇。
+*   **指标定义**：
+    *   `Identity-Link Precision/Recall/F1`：
+        *   将系统内部的实体簇与 Gold 对齐，计算合并/拆分是否正确；
+        *   Precision 反映“误合并别人的概率”，Recall 反映“漏合并同一人的概率”。
+    *   `Cross-User Leakage Rate`：
+        *   统计系统是否把不同用户/tenant 的事件错误地合并到同一身份下；
+        *   对于多用户场景，该指标应接近 0。
+
+2. **端到端身份聚合场景**
+
+*   **典型问题**：
+    *   “我昨天在所有设备上一共开了几次会？”
+    *   “把这周所有和我一起吃饭的人按出现次数排序。”
+*   **指标定义**：
+    *   仍采用 Answer F1 / J-Factuality / J-Completeness 组合：
+        *   通过结构化 Gold（真实聚合结果），计算结果集合的 F1；
+        *   裁判模型评估是否存在“把别人当成我”或“漏数自己事件”的情况。
+
+#### 3.5.6 物理时间轴锚定指标（Physical Timeline Anchoring）
+
+物理时间轴锚定关注的是：在存在时区、设备时钟误差和延迟写入等问题时，系统是否仍能在统一时间轴上保持事件顺序与时间窗判断的正确性。
+
+1. **时间归一离线测试**
+
+*   **数据构造**：
+    *   人为制造不一致的时间记录：
+        *   不同设备采用不同的时区；
+        *   某些设备存在固定偏差（快/慢若干分钟）；
+        *   部分事件延迟写入（记录时间晚于真实发生时间）。
+    *   Gold 记录每个事件的真实物理时间戳。
+*   **指标定义**：
+    *   `Time Normalization Error`：
+        *   对比系统内部归一后的时间戳与 Gold 的差异（以秒/分钟为单位，统计 P50 / P95）。
+    *   `Order Violation Rate`：
+        *   在应当满足 `event_a < event_b` 的 Gold 约束下，统计系统内部仍出现 `event_a >= event_b` 的比例。
+
+2. **端到端时间窗与时序场景**
+
+*   **典型问题**：
+    *   “昨天下午 3 点到 4 点之间我在做什么？”（多设备事件混合）；
+    *   “从我真正搬到北京之后的一周内，我每天几点睡觉？”（依赖物理搬家时间点，而非单个对话中叙事时间）。
+*   **指标定义**：
+    *   复用 Time-Filtering Accuracy / Order Consistency / J-Temporality：
+        *   检查事件是否正确落入指定物理时间窗；
+        *   检查回答中事件顺序是否与 Gold 时序一致；
+        *   通过裁判模型评估回答在时间表达上的严谨性（是否混淆“过去/现在/未来”）。
+
 ---
 
 ## 4. 竞对分析执行方案 (Action Plan)
 
 ### 4.1 搭建统一测评数据集 (Benchmark Dataset)
-我们需要构建一个标准化的 **"LifeLog-Bench"** 数据集，包含：
-1.  **合成数据 (Synthetic)**：
-    *   规模：小（50事件）、中（500事件）、大（5000事件）。
-    *   特点：包含预埋的“因果链”、“共现模式”和“否定陷阱”。
-    *   用途：验证 L2-L5 的逻辑正确性。
-2.  **真实模拟数据 (Realistic)**：
-    *   基于脚本生成的模拟人生日志（包含地点移动、会议、对话、情绪变化）。
-    *   用途：测试 L1 检索和 L4 语义泛化。
+我们需要构建一个标准化的 **"LifeLog-Bench"** 数据集。为了兼顾行业标准与 LifeLog 特性，该数据集将由两部分组成：
+
+1.  **Adapted-Standard (基于行业基准改编)**：
+    *   **来源**：选取 **LoCoMo** (Temporal/Multi-hop) 和 **LongMemEval** (Abstention/Update) 的核心测试集。
+    *   **改造**：将原始 Chat 记录转化为 LifeLog 事件流（Event Stream），保留原有的 Ground Truth 逻辑。
+    *   **用途**：用于 L2, L3, L5 的标准化评分，直接与 Mem0/Zep 对比。
+
+2.  **Native-LifeLog (原生 LifeLog 模拟)**：
+    *   **来源**：基于脚本生成的模拟人生日志（包含地点移动、会议、对话、情绪变化、多设备数据）。
+    *   **特点**：包含预埋的“因果链”、“共现模式”和“否定陷阱”。
+    *   **用途**：测试 L1 检索、L4 语义泛化以及物理时间轴锚定能力。
 
 ### 4.1.1 数据 Schema 约定（LifeLog-Bench v1）
 
@@ -267,6 +335,42 @@
   - L2-L5 上的 Order Consistency / State Accuracy / Graph Traversal Success Rate / Explanation Quality / Semantic Precision / Negative Logic Accuracy / Hallucination Rate。
 - 第三部分：**工程与成本侧观测**  
   - Storage per event / 索引构建时间 / 后台维护任务负载（如图谱更新、摘要生成）。
+
+### 4.5 外部公开基准与 LifeLog-Bench 的融合策略 (Adopt & Adapt)
+
+为了确保 MOYAN 的评测结果与行业现有工作（如 Mem0, Zep）具备直接可比性，同时又能体现 LifeLog 场景的特殊性，我们采取 **"Adopt & Adapt" (采纳并适配)** 策略，将行业基准映射到 LifeLog-Bench 中。
+
+#### 1. 行业基准的直接映射（The "Adopt" Part）
+
+我们将直接复用以下顶级基准的核心任务逻辑与评价指标：
+
+| MOYAN 能力层级    | 对标行业基准    | 具体复用任务                                                     | 竞品参考数据                                    |
+| :---------------- | :-------------- | :--------------------------------------------------------------- | :---------------------------------------------- |
+| **L2 (时序推理)** | **LoCoMo**      | **Temporal Reasoning**：复用其“事件先后”、“相对时间”类问题逻辑。 | Mem0 在 LoCoMo 上声称优于 OpenAI Memory。       |
+| **L3 (多跳推理)** | **LoCoMo**      | **Multi-hop QA**：复用其跨 Session 实体关联问题。                | -                                               |
+| **L5 (否定逻辑)** | **LongMemEval** | **Abstention**：复用其“信息不足时拒绝回答”的测试集。             | Zep 在 LongMemEval 上声称 Accuracy 提升 18.5%。 |
+| **动态更新**      | **LongMemEval** | **Knowledge Updates**：复用其“用户属性变更”测试逻辑。            | -                                               |
+
+#### 2. LifeLog 领域的适配改造（The "Adapt" Part）
+
+由于 LoCoMo 和 LongMemEval 原生数据均为 **Chat（对话）** 形式，而 MOYAN 处理的是 **LifeLog（事件流）**，我们需要进行如下适配（Data Transformation）：
+
+*   **Chat-to-Event 转换**：
+    *   将 LoCoMo 中的多轮对话 `User: "I'm going to Paris next week."` 转换为 LifeLog 事件 `Event(text="Plan to go to Paris", time=T, type="plan")`。
+    *   保留原数据集的 Ground Truth（答案），但输入 Context 替换为 MOYAN 检索出的事件列表。
+*   **增加时空噪声**：
+    *   在原基准的纯净时间轴上，注入 LifeLog 特有的噪声（如 GPS 漂移、时间戳乱序），测试 MOYAN 的 **物理时间轴锚定** 能力。
+
+#### 3. 差异化补充（The "Gap Filling" Part）
+
+针对行业基准未覆盖的 MOYAN 核心优势，我们在 LifeLog-Bench 中补充：
+
+*   **Ego-centric Graph Traversal**：GraphRAG 侧重全局摘要，我们补充“以我为中心”的路径查找（L3-L4）。
+*   **Multimodal Grounding**：LoCoMo 的多模态仅限于图片对话，我们补充“视频片段检索”与“行为语义对齐”（L4）。
+
+通过这种策略，MOYAN 的评测报告将包含两部分：
+1.  **"Standard Alignment"**：在 LoCoMo/LongMemEval 变体任务上的得分，直接证明 "MOYAN vs Mem0/Zep" 的优劣。
+2.  **"LifeLog Specialization"**：在 LifeLog 专有任务上的得分，证明 "Why General RAG fails here"。
 
 ## 5. 总结
 
