@@ -33,3 +33,15 @@ The Memory service already offers rich multimodal ingestion, search, and graph f
 - **Next steps**:
   - Publish the runbook and checklist alongside sample dashboards/alerts for auth failure rates, throttle events, and audit anomalies.
   - Extend integration tests to run in “auth-on + rate-limited” mode to validate separation and proper failure modes.
+
+## 4) 4-week delivery plan and acceptance criteria
+- **Week 1**: Land “production profile” defaults (auth + rate-limit knobs) and request-size validation middleware; ship ingress templates with payload/rate/TLS/CORS policies.
+- **Week 2**: Implement JWT/OIDC verification + tenant claim checks; add signed mutation verification and per-tenant throttling; emit structured audit/security logs.
+- **Week 3**: Add high-cost route circuit breakers and per-route timeouts; hook auth/throttle/audit metrics to dashboards + alerts; document SLOs and incident runbooks.
+- **Week 4**: Extend integration tests to run with auth-on + throttling; cover write/update/delete/link/graph-admin paths and overload responses; backfill regression tests for request-size clamps and circuit breakers.
+
+**Definition of done** (for the hardening push):
+- Auth on by default with tenant claims enforced, signed mutations verified, and per-tenant rate/connection limits active in both ingress templates and app middleware.
+- Structured audit + security logs plus metrics for auth failures, throttle events, and circuit breaker trips, with example dashboards/alerts.
+- Runbooks for key rotation, onboarding/offboarding, and throttling incidents published alongside a production checklist.
+- CI integration suite exercises auth-enabled, throttled, and overload cases for all mutation/graph-admin routes with deterministic expectations.
