@@ -49,3 +49,12 @@ The Memory service already offers rich multimodal ingestion, search, and graph f
 ### Week 1 status update (in progress)
 - Added a `MEMORY_CONFIG_PROFILE=production` config that turns on token auth by default and preconfigures per-tenant rate limits + request size caps.
 - Injected FastAPI middleware to reject oversized bodies early and throttle mutation endpoints, plus a hardened Nginx ingress template covering TLS, CORS, and edge rate limits.
+
+### Week 2 status update (done)
+- Added JWT/JWKS verification with issuer/audience claims and tenant claim enforcement, keeping header-only auth for development profiles.
+- Enabled request signing for all mutation and graph-admin routes with per-tenant secrets and clock-skew protection.
+- Exposed per-tenant token-bucket settings and security metrics (auth/signature failures, throttling, oversized bodies) for dashboards and alerting.
+
+### Week 3 status update (done)
+- Introduced API-layer circuit breakers and per-route timeouts for high-cost paths (search/timeline) using the reliability defaults.
+- Hardened admin/config endpoints to require authenticated, signed calls and added structured security audit logs for auth/signature outcomes.
