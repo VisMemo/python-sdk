@@ -45,3 +45,7 @@ The Memory service already offers rich multimodal ingestion, search, and graph f
 - Structured audit + security logs plus metrics for auth failures, throttle events, and circuit breaker trips, with example dashboards/alerts.
 - Runbooks for key rotation, onboarding/offboarding, and throttling incidents published alongside a production checklist.
 - CI integration suite exercises auth-enabled, throttled, and overload cases for all mutation/graph-admin routes with deterministic expectations.
+
+### Week 1 status update (in progress)
+- Added a `MEMORY_CONFIG_PROFILE=production` config that turns on token auth by default and preconfigures per-tenant rate limits + request size caps.
+- Injected FastAPI middleware to reject oversized bodies early and throttle mutation endpoints, plus a hardened Nginx ingress template covering TLS, CORS, and edge rate limits.
