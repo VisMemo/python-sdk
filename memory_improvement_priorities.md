@@ -1,22 +1,35 @@
-# Memory Service Improvement Priorities (Beyond UI)
+# Memory Service Improvement Priorities (Non-UI)
 
-## 1. Harden authentication and tenancy controls
-- **Current state**: The API ships with auth disabled by default and only supports a single shared token or a static token→tenant mapping when enabled. There is no built-in rate limit, quota, or key rotation path, and callers can bypass auth entirely when the feature flag is left off (common for local runs).【modules/memory/config/memory.config.yaml†L153-L176】【modules/memory/api/server.py†L148-L228】
-- **Impact**: Multi-agent/multi-user deployments cannot rely on strong isolation; accidental exposure of the token compromises every tenant. There is also no defense against abusive clients (replay, brute-force, or runaway query volume).
-- **Suggested direction**:
-  - Integrate an identity provider (OIDC/JWT) and enforce per-tenant claims at the gateway, with rotation and revocation stories.
-  - Add per-tenant rate limits/quotas and request signing for sensitive mutations (write/update/delete/link/graph admin).
-  - Move auth from "optional dev guard" to "default-on production profile" with configuration profiles for local vs. production.
-  - Emit structured security/audit logs (who/what/when, success/failure) and expose metrics for auth failures and throttling.
+The Memory service already offers rich multimodal ingestion, search, and graph features. The most pressing non-UI gap is production hardening so multiple agents/tenants can safely share one deployment. The items below describe the gaps, why they matter, and concrete steps to close them.
 
-## 2. Reliability and abuse safety nets at the edge
-- **Current state**: The service clamps search top-k and graph fanout inside the app, but the FastAPI layer does not expose client-facing limits (rate limiting, payload size guards, or circuit breakers on the HTTP edge). Authentication being optional further weakens these guardrails.
-- **Suggested direction**:
-  - Add an API gateway or middleware for rate limiting, request size validation, and per-tenant circuit breakers, aligning limits with the in-app clamps.
-  - Provide deployment-ready configs (Ingress/Nginx/Envoy) that enforce TLS, CORS allowlists, and anomaly logging.
+## 1) Identity, tenancy, and safety gates (highest impact)
+- **Current state**: Auth is optional and token handling is simplistic (single shared token or a static token→tenant map). There is no rate limit, quota, or signing for mutations, so a leaked token compromises all tenants.
+- **Impact**: Multi-agent and multi-tenant deployments have weak isolation and are fragile against brute-force or runaway usage.
+- **What “good” looks like**:
+  - Default-on authentication with an external IdP (OIDC/JWT) and per-tenant claims enforced at the edge.
+  - Rotatable credentials (per-tenant keys or JWT client secrets), revocation lists, and audit trails for all write/update/delete/link/graph-admin calls.
+  - Safety nets at the edge: rate limits/quotas per tenant, signed write requests, and structured security logs + metrics.
+- **Next steps**:
+  - Ship a production profile that enables auth by default and exposes OIDC/JWT settings alongside per-tenant rate-limit knobs.
+  - Add middleware or an API gateway policy for request signing on mutations and per-tenant throttling.
+  - Instrument structured audit logs (who/what/when/status) and export auth/throttle metrics for dashboards/alerts.
 
-## 3. Production-ready operational posture
-- **Current state**: Observability exists for metrics/health, but there is no documented runbook for key management, auth rollout, or incident response for auth failures.
-- **Suggested direction**:
-  - Ship a "production hardening" checklist covering secret management, token/JWT rotation cadence, onboarding flows, and SLOs for auth latency/error budget.
-  - Extend integration tests to cover auth-enabled paths (write/update/delete/graph admin) and per-tenant separation under throttling scenarios.
+## 2) Edge reliability and abuse containment
+- **Current state**: In-app clamps exist for top-k and fanout, but the HTTP edge lacks client-visible limits (request size, rate limiting, circuit breakers, CORS/TLS defaults).
+- **Impact**: Overly large payloads or bursty traffic can degrade the service before in-app safeguards apply; misconfigured origins risk data leakage.
+- **What “good” looks like**:
+  - Edge policies for payload size, concurrent requests, per-tenant rate/connection limits, and graceful overload responses.
+  - Secure ingress defaults: TLS required, explicit CORS allowlist, anomaly/error logging, and per-route timeouts.
+- **Next steps**:
+  - Provide ingress/gateway templates (Nginx/Envoy/Traefik) that codify payload limits, rate limits, timeouts, and CORS/TLS defaults aligned with in-app clamps.
+  - Add middleware-level request size validation and circuit breakers for high-cost routes (search/timeline/graph expand).
+
+## 3) Operational runbooks and test coverage for hardened mode
+- **Current state**: Metrics and health endpoints exist, but there is no documented runbook for key rotation, auth rollout, or throttling incidents. Integration tests rarely exercise auth-on mode.
+- **Impact**: Teams lack guidance for safe rollouts and incident response; regressions in auth-enabled paths may go unnoticed.
+- **What “good” looks like**:
+  - A production hardening checklist (secret management, rotation cadence, onboarding/offboarding flows, SLO/error budgets for auth and throttling).
+  - Integration tests that cover auth-enabled write/update/delete/link/graph-admin paths under rate limits/throttling.
+- **Next steps**:
+  - Publish the runbook and checklist alongside sample dashboards/alerts for auth failure rates, throttle events, and audit anomalies.
+  - Extend integration tests to run in “auth-on + rate-limited” mode to validate separation and proper failure modes.
