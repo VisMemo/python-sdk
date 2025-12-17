@@ -58,10 +58,16 @@ flowchart TD
 - Demo 与工具：`demo/run_pipeline_demo.py`（mema ingest→memory search/timeline/places）；Qdrant 状态排查脚本。
 
 ## 待补充（后续切口）
-- LLM 语义路径的缓存与幂等：避免重复批处理同一 run_id。
-- 更强的 equivalence/merge 审核流：人物等价的人工确认与回滚工具。
-- 多模态质量评估：对人脸/语音/ASR 低置信度的降级与补救（回退到 tag-based）。
-- 全链路观测：每步 latency/失败率、写入量、pending equivalence 监控。
+- **验收定义**：为全栈回归明确指标：PERSON 稳定 ID 覆盖率、SPOKEN_BY 覆盖率、OBJECT 白名单晋升率、LLM 事实条数/长度上限、写入成功率、端到端耗时。
+- **VLM/LLM 实测全开**：在 `demo/data/Jian.mp4` + 至少一个多人/双语视频上启用 clip/diarization/LLM，形成稳定回归用例（含 mock/真实两个 profile），对比验收指标。
+- **Memory HTTP 路径实测**：提供 Qdrant/Neo4j 本地启动指引与健康探针（超时/熔断配置），在 `memory.mode=http` 下验证写入/检索/租户隔离（含 auth 头/租户头必填）。
+- **LLM 缓存与幂等**：设计键（tenant_id+run_id+segment_window+hash(prompt+frames)）、TTL、命中率度量，明确与重试/幂等写的关系，避免重复批处理。
+- **Equivalence/merge 审核流**：默认保守不自动合并；定义人工确认入口、冻结/回滚流程、审计记录；暴露 pending 列表与 SLA。
+- **低置信度策略**：对人脸/语音/ASR 标记质量等级，低置信度降级到 tag-based 只写 Evidence（不晋升 Entity），避免污染全局 person；明确写/不写规则。
+- **观测与报警**：固化指标名与阈值（示例：`mema_step_latency_ms`、`llm_semantic_error_rate`、`pending_equivalence_count`、`memory_write_fail_total`），定义日志/trace 采样策略与报警基线。
+- **回归用例集**：除 Jian.mp4 外，加入室内多人对话、无物体/无场景、双语/跨语种、嘈杂/重叠语音等样本，覆盖白名单对象、diarization、ASR 降级分支。
+- **安全与租户边界**：在回归中校验跨租户隔离（auth/租户头），防止人物等价跨租户误合并；Memory HTTP 需强制 tenant_id 过滤。
+- **运维/持久化**：给出 identity-registry SQLite 备份/迁移方案、LLM 缓存清理、Qdrant/Neo4j 版本兼容与升级步骤，避免后续踩坑。
 
 ## 参考代码入口
 - Pipeline steps：`modules/memorization_agent/application/pipeline_steps.py`
