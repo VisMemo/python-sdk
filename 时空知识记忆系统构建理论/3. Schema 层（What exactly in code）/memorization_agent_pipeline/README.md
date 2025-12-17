@@ -16,7 +16,7 @@
   - 关系：SEGMENT→EVIDENCE(contains)，EVIDENCE→ENTITY(belongs_to/supported_by)，UTTERANCE→ENTITY(spoken_by)，voice/face/utterance 均落到稳定 person。
 - 写入：
   - `VideoGraphMapper` 注入 tenant 三键，写 MemoryEntry + Edge；MemoryAdapter 支持 local/http。
-  - LLM 语义可选（默认开启，可在 routing_ctx.disable）。
+  - LLM 语义可选（由 `routing_ctx.enable_llm_semantic` / `pipeline.llm_semantic.enable` 控制）。
 
 ### Mermaid（DAG & 数据流）
 ```mermaid
@@ -56,18 +56,33 @@ flowchart TD
 - Object 白名单晋升：仅 `pipeline.objects.entity_whitelist` 中的标签生成 Entity(OBJECT)；其余停留为 Evidence(object)。
 - 写入三键/tenant 强制：VideoGraphMapper 注入 tenant_id/user_id/memory_domain/run_id；MemoryEntry 侧与 Graph v1 检索过滤一致。
 - Demo 与工具：`demo/run_pipeline_demo.py`（mema ingest→memory search/timeline/places）；Qdrant 状态排查脚本。
+- 人脸证据图片落盘：不在图里存 `face_base64`，保存到 `.artifacts/memorization/evidence_media/faces/<evidence_id>.jpg`，Evidence.extras 仅保留 `image_ref`。
+- Neo4j 写入兼容：Graph v0 upsert 会将 `extras/provenance/...` 等嵌套对象编码为 `*_json` 字段，避免 Neo4j “map 不能做属性值”导致 upsert 失败。
+- Identity registry 不阻塞事件循环：SQLite I/O 默认通过专用线程池执行（`MEMA_IDENTITY_REGISTRY_ASYNC/WORKERS` 可调）。
+
+## 当前状态（只跑 Jian.mp4 的“最小闭环”）
+- Memory HTTP + Qdrant/Neo4j：可启动并接受 `POST /graph/v0/upsert`（已修复 Neo4j map 属性写入崩溃）。
+- Memorization pipeline：可在 `demo/data/Jian.mp4` 上跑通 probe/slice/vision/audio/fusion/build_graph/write_graph（不依赖你本地 VLM）。
+- 仍需注意：
+  - “不跑 LLM”不等于“无外网”：当前 MemoryEntry 的 text embedding 可能走远程 provider（需在 Memory embedding 配置里切换为本地模型或禁用对应写入）。
+  - 若 `UtteranceEvidence` 数量为 0，通常意味着 ASR 未产出或未回填到 ctx；需要把“ASR 产物→UtteranceEvidence”链路跑实（见 TODO）。
 
 ## 待补充（后续切口）
-- **验收定义**：为全栈回归明确指标：PERSON 稳定 ID 覆盖率、SPOKEN_BY 覆盖率、OBJECT 白名单晋升率、LLM 事实条数/长度上限、写入成功率、端到端耗时。
-- **VLM/LLM 实测全开**：在 `demo/data/Jian.mp4` + 至少一个多人/双语视频上启用 clip/diarization/LLM，形成稳定回归用例（含 mock/真实两个 profile），对比验收指标。
-- **Memory HTTP 路径实测**：提供 Qdrant/Neo4j 本地启动指引与健康探针（超时/熔断配置），在 `memory.mode=http` 下验证写入/检索/租户隔离（含 auth 头/租户头必填）。
-- **LLM 缓存与幂等**：设计键（tenant_id+run_id+segment_window+hash(prompt+frames)）、TTL、命中率度量，明确与重试/幂等写的关系，避免重复批处理。
-- **Equivalence/merge 审核流**：默认保守不自动合并；定义人工确认入口、冻结/回滚流程、审计记录；暴露 pending 列表与 SLA。
-- **低置信度策略**：对人脸/语音/ASR 标记质量等级，低置信度降级到 tag-based 只写 Evidence（不晋升 Entity），避免污染全局 person；明确写/不写规则。
-- **观测与报警**：固化指标名与阈值（示例：`mema_step_latency_ms`、`llm_semantic_error_rate`、`pending_equivalence_count`、`memory_write_fail_total`），定义日志/trace 采样策略与报警基线。
-- **回归用例集**：除 Jian.mp4 外，加入室内多人对话、无物体/无场景、双语/跨语种、嘈杂/重叠语音等样本，覆盖白名单对象、diarization、ASR 降级分支。
-- **安全与租户边界**：在回归中校验跨租户隔离（auth/租户头），防止人物等价跨租户误合并；Memory HTTP 需强制 tenant_id 过滤。
-- **运维/持久化**：给出 identity-registry SQLite 备份/迁移方案、LLM 缓存清理、Qdrant/Neo4j 版本兼容与升级步骤，避免后续踩坑。
+- **验收定义（先只针对 Jian.mp4）**：明确可量化指标：PERSON 稳定 ID 覆盖率、SPOKEN_BY 覆盖率、OBJECT 白名单晋升率、Graph v0 upsert 成功率、端到端耗时。
+- **Jian.mp4 端到端（无 VLM/LLM）**：
+  - 关闭 LLM 语义（`enable_llm_semantic=false`）；
+  - 确保 diarization+ASR 产出 `UtteranceEvidence`（至少非 0）并能 `SPOKEN_BY → person::<tenant>::<uuid>`。
+- **Memory HTTP 路径（写入+检索）**：
+  - 已可写入（graph upsert 修复完成）；仍需补齐“检索侧验证脚本”：写入后调用 `/graph/v0/segments`、`/graph/v0/events`、`/graph/v1/search` 校验结果可用。
+  - 明确 tenant/user/run filter 的最小合同（headers + filters 一致），避免“写入成功但检索 0 命中”。
+- **彻底离线（可选）**：把 Memory embedding 配置切到本地模型（或对 demo 禁用向量写入），避免 text embedding 走远程 provider。
+- **LLM 缓存与幂等（后续）**：设计键（tenant_id+run_id+segment_window+hash(prompt+frames)）、TTL、命中率度量，明确与重试/幂等写的关系。
+- **Equivalence/merge 审核流（后续）**：默认保守不自动合并；定义人工确认入口、冻结/回滚流程、审计记录；暴露 pending 列表与 SLA。
+- **低置信度策略（后续）**：对人脸/语音/ASR 标记质量等级，低置信度只写 Evidence（不晋升 Entity），避免污染全局 person；明确写/不写规则。
+- **观测与报警（后续）**：固化指标名与阈值（示例：`mema_step_latency_ms`、`pending_equivalence_count`、`memory_write_fail_total`），定义日志/trace 采样策略与报警基线。
+- **回归用例集（扩展后再做）**：除 Jian.mp4 外加入多人/双语/嘈杂样本覆盖 diarization、ASR 降级分支。
+- **安全与租户边界（扩展后再做）**：回归校验跨租户隔离，禁止跨租户人物合并；Memory HTTP 强制 tenant_id 过滤。
+- **运维/持久化（扩展后再做）**：identity-registry SQLite 备份/迁移、缓存清理、Qdrant/Neo4j 版本兼容与升级步骤。
 
 ## 参考代码入口
 - Pipeline steps：`modules/memorization_agent/application/pipeline_steps.py`
