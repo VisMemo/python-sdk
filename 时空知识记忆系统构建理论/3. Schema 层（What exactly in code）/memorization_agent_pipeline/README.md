@@ -67,22 +67,29 @@ flowchart TD
   - “不跑 LLM”不等于“无外网”：当前 MemoryEntry 的 text embedding 可能走远程 provider（需在 Memory embedding 配置里切换为本地模型或禁用对应写入）。
   - 若 `UtteranceEvidence` 数量为 0，通常意味着 ASR 未产出或未回填到 ctx；需要把“ASR 产物→UtteranceEvidence”链路跑实（见 TODO）。
 
+## Hypothesis 层（现状与缺口）
+- 图模型已支持 hypothesis：`GraphEdge.layer`/`GraphEdge.status` 可用于区分 `fact/semantic/identity/hypothesis` 与 `candidate` 等状态。
+- 当前已有的 hypothesis 产出主要在 Memory 侧的“后处理/管理接口”：
+  - `POST /graph/v0/admin/build_event_relations`：
+    - `NEXT_EVENT(layer="fact")`：按时间排序的相邻事件；
+    - `CAUSES(layer="hypothesis", status="candidate")`：规则推断（目前示例：相邻事件且同一 place）。
+- 现阶段 **pipeline 本身不会直接产出** “person↔person / person↔object”的 hypothesis 关系：
+  - `POST /graph/v0/admin/build_cooccurs` 会基于 timeslice 聚合 `CO_OCCURS_WITH`，但默认 `layer="semantic"`（不是 hypothesis）。
+  - `person↔object` 只有在 object 被白名单晋升为 `Entity(OBJECT)` 后，才会进入 timeslice/cooccurs 的聚合范围。
+- 后续增强方向：在 `build_graph` 或写入后处理阶段增加“共现/空间邻近/对话轮次”的推断边，显式写为 `layer="hypothesis"`（并保持可回滚/可审阅）。
+
 ## 待补充（后续切口）
-- **验收定义（先只针对 Jian.mp4）**：明确可量化指标：PERSON 稳定 ID 覆盖率、SPOKEN_BY 覆盖率、OBJECT 白名单晋升率、Graph v0 upsert 成功率、端到端耗时。
-- **Jian.mp4 端到端（无 VLM/LLM）**：
-  - 关闭 LLM 语义（`enable_llm_semantic=false`）；
-  - 确保 diarization+ASR 产出 `UtteranceEvidence`（至少非 0）并能 `SPOKEN_BY → person::<tenant>::<uuid>`。
-- **Memory HTTP 路径（写入+检索）**：
-  - 已可写入（graph upsert 修复完成）；仍需补齐“检索侧验证脚本”：写入后调用 `/graph/v0/segments`、`/graph/v0/events`、`/graph/v1/search` 校验结果可用。
-  - 明确 tenant/user/run filter 的最小合同（headers + filters 一致），避免“写入成功但检索 0 命中”。
-- **彻底离线（可选）**：把 Memory embedding 配置切到本地模型（或对 demo 禁用向量写入），避免 text embedding 走远程 provider。
-- **LLM 缓存与幂等（后续）**：设计键（tenant_id+run_id+segment_window+hash(prompt+frames)）、TTL、命中率度量，明确与重试/幂等写的关系。
-- **Equivalence/merge 审核流（后续）**：默认保守不自动合并；定义人工确认入口、冻结/回滚流程、审计记录；暴露 pending 列表与 SLA。
-- **低置信度策略（后续）**：对人脸/语音/ASR 标记质量等级，低置信度只写 Evidence（不晋升 Entity），避免污染全局 person；明确写/不写规则。
-- **观测与报警（后续）**：固化指标名与阈值（示例：`mema_step_latency_ms`、`pending_equivalence_count`、`memory_write_fail_total`），定义日志/trace 采样策略与报警基线。
-- **回归用例集（扩展后再做）**：除 Jian.mp4 外加入多人/双语/嘈杂样本覆盖 diarization、ASR 降级分支。
-- **安全与租户边界（扩展后再做）**：回归校验跨租户隔离，禁止跨租户人物合并；Memory HTTP 强制 tenant_id 过滤。
-- **运维/持久化（扩展后再做）**：identity-registry SQLite 备份/迁移、缓存清理、Qdrant/Neo4j 版本兼容与升级步骤。
+### 优先级计划（先把 Jian.mp4 跑稳）
+- P0（必须）：跑通 Jian.mp4 的“无 LLM”端到端，并让检索可用
+  - 关闭 LLM 语义（`enable_llm_semantic=false`），确保 diarization+ASR 产出 `UtteranceEvidence`（至少非 0）且 `SPOKEN_BY → person::<tenant>::<uuid>`。
+  - 写入后做最小检索验收：`/graph/v0/segments`、`/graph/v0/events`、`/graph/v1/search` 返回非空且 tenant/user/run 过滤一致。
+- P1（必须）：产出可解释的“关系”以支持 demo
+  - 跑 `POST /graph/v0/admin/build_timeslices`（从 segments 生成 timeslice）→ `POST /graph/v0/admin/build_cooccurs`（聚合 CO_OCCURS_WITH）→ `POST /graph/v0/admin/build_event_relations`（NEXT_EVENT/CAUSES）。
+  - 明确 demo 展示口径：`CO_OCCURS_WITH(layer="semantic")` 表示共现聚合；`CAUSES(layer="hypothesis")` 表示规则假设。
+- P2（可选）：彻底离线
+  - 把 Memory embedding 配置切到本地模型（或对 demo 禁用向量写入），避免 text embedding 走远程 provider。
+- P3（后续）：面向生产的治理增强
+  - LLM 缓存与幂等；Equivalence/merge 审核流；低置信度写入策略；观测与报警；更广样本回归；运维/持久化。
 
 ## 参考代码入口
 - Pipeline steps：`modules/memorization_agent/application/pipeline_steps.py`
