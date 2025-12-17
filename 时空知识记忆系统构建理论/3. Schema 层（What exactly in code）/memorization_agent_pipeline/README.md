@@ -59,6 +59,9 @@ flowchart TD
 - 人脸证据图片落盘：不在图里存 `face_base64`，保存到 `.artifacts/memorization/evidence_media/faces/<evidence_id>.jpg`，Evidence.extras 仅保留 `image_ref`。
 - Neo4j 写入兼容：Graph v0 upsert 会将 `extras/provenance/...` 等嵌套对象编码为 `*_json` 字段，避免 Neo4j “map 不能做属性值”导致 upsert 失败。
 - Identity registry 不阻塞事件循环：SQLite I/O 默认通过专用线程池执行（`MEMA_IDENTITY_REGISTRY_ASYNC/WORKERS` 可调）。
+- 运行级缓存隔离：`<cache_dir>/<tenant>/<run_id>/faces_min*.json`、`audios.json`；避免不同视频/不同 run 互相污染。
+- Face cache 防“假空”：当 InsightFace/onnxruntime 不可用时不写入 `faces_min*.json`，避免先失败后永远 0 face；旧格式的空缓存会在模型可用时自动重算一次。
+- YOLO 支持帧文件路径：object detection 现在优先读 `slice.frames_clip`（路径）并兼容 base64 输入，避免 FFmpeg 路径下 “把路径当 base64 解码” 导致 0 objects。
 
 ## 当前状态（只跑 Jian.mp4 的“最小闭环”）
 - Memory HTTP + Qdrant/Neo4j：可启动并接受 `POST /graph/v0/upsert`（已修复 Neo4j map 属性写入崩溃）。
@@ -66,6 +69,13 @@ flowchart TD
 - 仍需注意：
   - “不跑 LLM”不等于“无外网”：当前 MemoryEntry 的 text embedding 可能走远程 provider（需在 Memory embedding 配置里切换为本地模型或禁用对应写入）。
   - 若 `UtteranceEvidence` 数量为 0，通常意味着 ASR 未产出或未回填到 ctx；需要把“ASR 产物→UtteranceEvidence”链路跑实（见 TODO）。
+  - 若你之前因为缺依赖（例如 `onnxruntime`）跑出了 0 face：现在不会再把“失败态空结果”缓存死；装好依赖后直接重跑即可（run_id 不变也能自愈）。
+  - `run_real_pipeline.py` 现在会真正使用 `routing_ctx.memory_mode/memory_base_url` 写入 Memory（而不是意外走 local 模式）；用环境变量即可控制：
+    - `MEMA_MEMORY_MODE=http`
+    - `MEMA_MEMORY_BASE_URL=http://127.0.0.1:8000`
+    - `MEMA_PIPELINE_LLM_SEMANTIC_ENABLE=false`（完全跳过 semantic 步骤，不再探测/依赖 SGLang）
+    - `MEMA_USER_ID=subject_1`（必须：MemoryEntry 写入需要 user_id 三键）
+    - `MEMA_MEMORY_DOMAIN=general`、`MEMA_RUN_ID=Jian.mp4`（建议：保证检索过滤稳定）
 
 ## Hypothesis 层（现状与缺口）
 - 图模型已支持 hypothesis：`GraphEdge.layer`/`GraphEdge.status` 可用于区分 `fact/semantic/identity/hypothesis` 与 `candidate` 等状态。
@@ -90,6 +100,10 @@ flowchart TD
   - 把 Memory embedding 配置切到本地模型（或对 demo 禁用向量写入），避免 text embedding 走远程 provider。
 - P3（后续）：面向生产的治理增强
   - LLM 缓存与幂等；Equivalence/merge 审核流；低置信度写入策略；观测与报警；更广样本回归；运维/持久化。
+
+## 时间轴说明（像我 12 岁那样）
+- 我们默认只保证“视频里的时间”（media time）：`t_media_start/t_media_end`（秒），因为每个视频都有。
+- “真实世界时间”（physical time，比如拍摄日期/地点的 EXIF/系统时间）是可选的：没有元数据也不影响图构建，只是少了一个把视频和现实世界日历对齐的维度。
 
 ## 参考代码入口
 - Pipeline steps：`modules/memorization_agent/application/pipeline_steps.py`
