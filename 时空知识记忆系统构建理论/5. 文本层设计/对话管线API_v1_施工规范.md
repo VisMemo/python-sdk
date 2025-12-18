@@ -177,10 +177,13 @@
 - `extract: bool = True`
 - `write_events: bool = True`
 - `write_facts: bool = True`（若 `extract=False` 则必须视为 false）
+- `graph_upsert: bool = True`（默认：同步写入 TKG 主图；可显式关闭，见 6.2.3）
+- `graph_policy: "require" | "best_effort" = "best_effort"`（图写入失败语义，见 6.2.3）
+- `overwrite_existing: bool = False`（幂等策略开关，见 6.2.1）
 
 #### LLM 配置（必须支持“用户自带 key”）
 - `llm: { provider, model, api_key, base_url?, timeout_s? } | None`
-- `llm_policy: "require" | "best_effort" = "best_effort"`
+- `llm_policy: "require" | "best_effort" = "require"`
 
 **llm_policy 的两种行为（这是必须写死的产品语义）：**
 - `require`：没有可用的 LLM 配置就直接报错（不写入任何内容），错误码/异常信息必须明确是“缺少 LLM 配置”
@@ -191,6 +194,59 @@
 1) 若调用方传入 `llm.provider + llm.api_key`：使用用户提供 key（BYOK）
 2) 否则：允许从环境变量/默认配置加载平台 key（platform-managed）
 3) 若两者都没有：按 `llm_policy` 执行 require/best_effort
+
+#### 6.2.1 `session_id` 幂等与 `overwrite_existing`（必须写死）
+
+对齐 `文本记忆统一接入方案.md` 的设计：`session_id` 必须作为全系统唯一去重键（绑定到 `run_id`）。
+
+- 默认：`overwrite_existing=false`
+  - 若检测到该 `session_id` 已经“归档完成”（completed），则**跳过**本次调用，返回 `status="skipped_existing"`（不抽取、不写入）。
+- 当 `overwrite_existing=true`
+  - 视为“覆盖更新”：
+    - 重新执行抽取；
+    - 对同一 `session_id` 的既有 facts 执行更新（V1 实现策略：依赖 `session_marker.metadata.fact_ids` 精确定位旧 facts；写入成功后仅删除“新抽取结果不再包含”的旧 fact ids，避免误删与避免重复）。
+
+**关键点：如何判定“已归档完成”？**
+
+不能仅依据 “`run_id=session_id` 下是否存在任何条目” 来判断（因为失败重试时可能只写入了部分 events）。
+
+必须写入一个 `session_marker`（推荐实现细节）：
+- `kind="semantic"`, `modality="text"`（实现约束：当前 QdrantStore 会跳过 `structured` 模态写入，因此 marker 必须可被向量存储检索到）
+- `contents`: `["session_marker {session_id}"]`（便于用 `/search` 精确命中）
+- `metadata`（最小集合）：
+  - `{ "memory_domain":"dialog", "run_id": session_id, "node_type":"session_marker", "source":"dialog_session_marker", "status":"completed|in_progress|failed", "fact_ids":[...], ... }`
+- 只有当 “events+facts（以及必要 links）” 写入成功后，才将 marker 标记为 `completed`。
+
+**补充（实现已落地的关键约束）**：
+- raw turn / pipeline-managed entries 必须设置 `metadata.dedup_skip=true`，禁止 neighbor-based merge（否则重试/重复提交可能合并掉对话证据）；服务端写入前会移除该内部字段，避免污染持久化 metadata。
+
+#### 6.2.2 抽取成功但写入失败的回滚语义（必须明确）
+
+场景：LLM 抽取成功，但写入失败（例如 Neo4j 超时导致 `/write` 返回 5xx）。
+
+- 默认策略：**不回滚已写入的 events**，采用“幂等 upsert + 安全重试”。
+  - 原因：现有系统的回滚能力主要覆盖 UPDATE/DELETE 的快照回滚，不保证 batch ADD 的跨存储原子回滚；硬回滚更容易误删正确数据。
+  - 行为：
+    - 本次返回 `status="failed"`，并提供 `error_reason`；
+    - `session_marker` 不得标记为 `completed`；
+    - 调用方可用同一 `session_id` 重试，系统应收敛到一致状态（不产生重复 facts）。
+- 可选（默认关闭）：若启用 `cleanup_on_failure`，可 best-effort 删除本次已写入的 session 条目，但必须严格带 tenant+principals+run_id 过滤并要求强确认，避免误删历史数据。
+
+#### 6.2.3 GraphUpsert（对话同步进入 TKG 主图，可选但推荐）
+
+背景：当前系统存在两类“图形态”——`MemoryEntry + Edge` 的检索索引图（服务 `/search` 的 expand_graph），以及 `GraphUpsertRequest` 的 TKG 主图（服务 explain/timeslice/event 链路与 L4/L5 harness）。对话接入要走向 v1.0，必须让对话也进入 TKG 主图。
+
+- `graph_upsert=true`（默认）
+  - 先写入 `/write`（MemoryEntry+Edge），再额外构造 `GraphUpsertRequest` 并调用 `POST /graph/v0/upsert` 写入 TKG 主图（注意：路径仍是 v0，这是兼容面；能力按 v1.0 语义演进）。
+- `graph_upsert=false`（显式关闭）
+  - 仅写入 `/write`（MemoryEntry+Edge），不写 TKG 主图。
+- `graph_policy` 语义（必须可预测）：
+  - `best_effort`：
+    - 图写入失败不影响本次 `session_write` 的主结果（events/facts 仍视为成功写入）；
+    - 返回 debug/trace 中必须标记 `graph_upsert_status="failed"` 与错误摘要；
+    - 允许后续用同一 `session_id` 重试补齐图写入（幂等 upsert）。
+  - `require`：
+    - 图写入失败视为本次会话归档失败：返回 `status="failed"`，并确保 `session_marker.status != "completed"`，以便调用方用同一 `session_id` 重试补齐。
 
 ### 6.3 抽取输出（必须兼容统一接入方案）
 抽取器输出 JSON 必须满足以下最小结构（V1 子集）：
@@ -281,54 +337,62 @@
 - `filters`：
   - `tenant_id: tenant_id`
   - `user_id: ["u:{user_id}", "p:{product_id}"?]`
-  - `user_match: "any"`
+  - `user_match: "all"`（推荐；强隔离，避免串租户/串主体）
   - `memory_domain: "dialog"`
   - `memory_type: ["semantic"]`
   - `modality: ["text"]`
-  - `source: ["mem0"]`
+  - `source: ["locomo_text_pipeline"]`（对齐 benchmark 管线写入的 source）
 - `expand_graph: false`（默认）
 
 **B) event_search**
 - `filters`：
   - `tenant_id: tenant_id`
   - `user_id: principals`
-  - `user_match: "any"`
+  - `user_match: "all"`（推荐；与 fact_search 一致）
   - `memory_domain: "dialog"`
   - `memory_type: ["episodic"]`
   - `modality: ["text"]`
-  - `source: ["conversation"]`
+  - `source`: 可选（V1 默认不加，避免漏召回其他对话源；LoCoMo 写入默认为 `locomo_text_pipeline`）
 - `expand_graph: true`（默认；利用当前默认 3-hop 图扩展触及时序证据）
 
 > 说明：`expand_graph=true` 在服务端当前实现里主要用于“邻域加分/提示”，不会自动把邻居节点加入 hits；因此我们仍需要 fact_search + reference_trace 来稳定拿到证据链。
 
 #### 7.3.3 融合排序（必须做，否则分数不稳定）
-**目标：不同路召回的 score 不可比，因此必须归一化后再融合。**
+**目标：对齐 benchmark：固定权重融合 + 去重（不做跨路归一化）。**
 
-1) 对每一路（A/B/C）分别做 list-level 归一化：
-   - `norm = (score - min) / (max - min)`，max==min 时统一给 0.5
-2) 固定 source 权重（V1 写死，后续只允许通过新增 strategy 调整）：
+1) 固定 source 权重（V1 写死，后续只允许通过新增 strategy 调整）：
    - `fact_search = 2.0`
    - `reference_trace = 1.8`
    - `event_search = 1.0`
-3) `final_score = norm * source_weight`
-4) 去重策略（V1）：
+2) `final_score = score * source_weight`
+3) 去重策略（V1）：
    - 以 `hit.id` 为主键（若不存在则退回 `entry.metadata.event_id/turn_id`）
    - 同一主键保留 `final_score` 更高者
-5) 截断：返回 topk
+4) 截断：返回 topk
 
 #### 7.3.4 debug（必须输出）
 `memory.retrieval` 返回必须包含：
-- `debug.executed_calls`：每路调用记录：
-  - `api`: `"fact_search"|"event_search"|"reference_trace"`
+- `debug.plan`（对齐 benchmark 口径）：
+  - `latency_ms` / `retrieval_latency_ms` /（可选）`qa_latency_ms` / `total_latency_ms`
+- `debug.executed_calls`：每路调用记录（对齐 benchmark 字段，额外补齐 `latency_ms` 便于排障）：
+  - `api`: `"fact_search"|"event_search"|"trace_references"`
   - `count`
   - `latency_ms`
   - `error`（若失败）
-  - `trace`（来自服务端 `/search` 的 trace；至少包含 scope_used/attempts/weights_used）
-- `debug.fusion`：
-  - `source_weights`
-  - `normalization: "minmax_v1"`
-  - `deduped_before/after`
-- `debug.strategy: "dialog_v1"`
+- `debug.evidence_count`
+
+#### 7.3.5 QA 生成（可选，但建议对齐 benchmark）
+
+当调用方需要“直接拿到答案”而不是只拿证据时，允许在客户端库侧增加一步 QA 汇总：
+
+- 入参（新增）：
+  - `with_answer: bool = false`（true 时返回 `answer`）
+  - `task: str = "GENERAL"`（透传给 QA user_prompt）
+  - `llm_policy: "require" | "best_effort" = "best_effort"`
+- 行为（对齐 `benchmark/adapters/moyan_memory_qa_adapter.py::_generate_answer`）：
+  - system_prompt：使用 `QA_SYSTEM_PROMPT_GENERAL`（必须由单测锁死与 benchmark 一致）
+  - user_prompt：按 “Question/Task type/Evidence 列表” 拼装（Top-15，类型映射 Fact/Reference/Event）
+  - 输出：`answer: str`
 
 ### 7.4 strategy = `video_v1`（V1 先做最小实现）
 - 只调用一次 `/search`：
@@ -357,12 +421,15 @@
 - 返回值与日志里 **严禁包含 api_key**（只允许显示 provider/model/byok=true|false）。
 
 ### 8.3 两种“未提供 key”的行为（必须一致）
-对 `session_write`（抽取）与 `retrieval`（可选 rerank）统一采用：
+对 `session_write`（抽取）与 `retrieval`（可选 QA/可选 rerank）统一采用：
 
 - `llm_policy="require"`：没 key 就报错（硬失败）
 - `llm_policy="best_effort"`：没 key 则降级（软失败）
   - session_write：只写 events，跳过 facts
-  - retrieval：自动关闭 rerank（只做融合排序）
+  - retrieval：
+    - `with_answer=false`：不需要 LLM（只做融合排序）
+    - `with_answer=true`：返回可预测的降级答案（无证据→`insufficient information`；有证据→`Unable to answer in dummy mode.`）
+    - （未来）rerank.enabled=true 且无 key：自动关闭 rerank（并在 debug 标记）
 
 ---
 
@@ -372,8 +439,7 @@
 - `memory.session_write` ≈ `archive_session`（只是抽取执行位置从服务端变为客户端）
 - `dialog_v1` 的 facts schema 与统一接入方案保持一致（V1 子集）
 - `source/memory_domain` 的约定与统一接入方案一致：
-  - facts: `source="mem0"`, `memory_domain="dialog"`
-  - events: `source="conversation"`, `memory_domain="dialog"`
+  - facts/events: `source="locomo_text_pipeline"`, `memory_domain="dialog"`（对齐 benchmark 管线）
 
 未来如果把抽取迁回服务端（真正的 `/dialog/v1/archive_session`），只需要把 `session_write` 的“抽取+写入”放到服务端实现，客户端签名与 payload 不变，数据模型不需要迁移。
 
@@ -384,17 +450,19 @@
 ### 10.1 必实现项（V1）
 - [ ] 客户端库新增 `memory.session_write`
 - [ ] 客户端库新增 `memory.retrieval(strategy=dialog_v1|video_v1)`
-- [ ] `dialog_v1` 的融合排序：归一化 + source 权重 + 去重
+- [ ] `dialog_v1` 的融合排序：固定 source 权重 + 去重（对齐 benchmark）
+- [ ] `dialog_v1` 的可选 QA：`with_answer=true` 时输出 `answer`（prompt/格式对齐 benchmark）
 - [ ] principals（u:/p:/pub）编码落库与检索一致
 - [ ] tenant 强隔离：`X-Tenant-ID` + `filters.tenant_id` 双保险
-- [ ] BYOK：provider/model/api_key 透传到抽取/（可选）rerank
+- [ ] BYOK：provider/model/api_key 透传到抽取/（可选）QA/（可选）rerank
 - [ ] llm_policy 两种行为在两函数里一致
 
 ### 10.2 建议测试用例（至少这些）
 - [ ] `session_write` 在 `llm_policy=require` 且无 key 时硬失败
 - [ ] `session_write` 在 `llm_policy=best_effort` 且无 key 时仅写 events
 - [ ] `retrieval` 在 rerank.enabled 且无 key 时按 llm_policy 决定 error/disable
+- [ ] `retrieval` 在 with_answer=true 且无 key 时按 llm_policy 决定 error/降级答案
+- [ ] QA prompt 与 user_prompt 拼装格式锁死对齐 benchmark
 - [ ] principals 隔离：不同 `u:` 不互相召回；同 `p:` 可共享召回
 - [ ] tenant 隔离：不同 tenant_id 不互相召回（必须验证 filters.tenant_id 生效）
-- [ ] `dialog_v1` 的归一化/权重融合稳定性（固定输入 → 固定排序）
-
+- [ ] `dialog_v1` 的权重融合稳定性（固定输入 → 固定排序）
