@@ -76,6 +76,13 @@ flowchart TD
     - `MEMA_PIPELINE_LLM_SEMANTIC_ENABLE=false`（完全跳过 semantic 步骤，不再探测/依赖 SGLang）
     - `MEMA_USER_ID=subject_1`（必须：MemoryEntry 写入需要 user_id 三键）
     - `MEMA_MEMORY_DOMAIN=general`、`MEMA_RUN_ID=Jian.mp4`（建议：保证检索过滤稳定）
+  - 若你的环境存在“CUDA 可见但缺 cudnn”这类半残 GPU（常见于容器/驱动不完整）：
+    - 强制 ASR 用 CPU：`MEMA_PIPELINE_ASR_DEVICE=cpu`
+    - 强制 voice embedding 用 CPU：`MEMA_VOICE_DEVICE=cpu`
+  - 若你不想让 pipeline 做 OpenCLIP 的 segment thumbnail/clip_image 聚合（会触发权重下载/缓存）：
+    - `MEMA_PIPELINE_ENABLE_CLIP_IMAGE=false`
+  - 若你只想跑“写图/写向量”但不想让 Memory embedding 走远程 provider：
+    - `MEMA_FORCE_HASH_EMBEDDINGS=1`（VG → MemoryEntry 的 text/image/audio 额外向量全部用可重复的 hash fallback）
 
 ## Hypothesis 层（现状与缺口）
 - 图模型已支持 hypothesis：`GraphEdge.layer`/`GraphEdge.status` 可用于区分 `fact/semantic/identity/hypothesis` 与 `candidate` 等状态。
