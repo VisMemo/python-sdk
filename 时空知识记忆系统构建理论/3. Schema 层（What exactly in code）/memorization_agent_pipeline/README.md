@@ -66,7 +66,15 @@ flowchart TD
 ## 当前状态（只跑 Jian.mp4 的“最小闭环”）
 - Memory HTTP + Qdrant/Neo4j：可启动并接受 `POST /graph/v0/upsert`（已修复 Neo4j map 属性写入崩溃）。
 - Memorization pipeline：可在 `demo/data/Jian.mp4` 上跑通 probe/slice/vision/audio/fusion/build_graph/write_graph（不依赖你本地 VLM）。
+- Ops 状态查询：
+  - `POST http://127.0.0.1:8081/ingest`：提交任务（run_id 不填会自动生成）。
+  - `GET  http://127.0.0.1:8081/ingest/{task_id}`：返回**全量**任务数据（可能非常大，包含中间结果/向量）。
+  - `GET  http://127.0.0.1:8081/ingest/{task_id}/status`：返回**精简状态/摘要**（适合 UI 轮询/排障）。
+  - 启动全链路 Runbook：见 `docs/时空知识记忆系统构建理论/3. Schema 层（What exactly in code）/memorization_agent_pipeline/RUNBOOK.md`。
 - 仍需注意：
+  - 如果你要启用 VLM（OpenRouter 的 Qwen VL），确保 `memorization_agent` 进程能拿到 `OPENROUTER_API_KEY`：
+    - 推荐：写入 `modules/memory/config/.env`（ops server 会 best-effort 自动加载该文件）
+    - 或者：在启动 ops server 前手动 `export OPENROUTER_API_KEY=...`
   - “不跑 LLM”不等于“无外网”：当前 MemoryEntry 的 text embedding 可能走远程 provider（需在 Memory embedding 配置里切换为本地模型或禁用对应写入）。
   - 若 `UtteranceEvidence` 数量为 0，通常意味着 ASR 未产出或未回填到 ctx；需要把“ASR 产物→UtteranceEvidence”链路跑实（见 TODO）。
   - 若你之前因为缺依赖（例如 `onnxruntime`）跑出了 0 face：现在不会再把“失败态空结果”缓存死；装好依赖后直接重跑即可（run_id 不变也能自愈）。
@@ -83,6 +91,28 @@ flowchart TD
     - `MEMA_PIPELINE_ENABLE_CLIP_IMAGE=false`
   - 若你只想跑“写图/写向量”但不想让 Memory embedding 走远程 provider：
     - `MEMA_FORCE_HASH_EMBEDDINGS=1`（VG → MemoryEntry 的 text/image/audio 额外向量全部用可重复的 hash fallback）
+
+## 存到哪里了？（Neo4j / Qdrant / 本地文件）
+- Neo4j：Graph v0 节点/边（segments/evidences/entities/events/places/timeslices/utterances…）由 Memory service 写入。
+- Qdrant：MemoryEntry 的向量（text/image/audio）由 Memory service 写入；本阶段可能是 hash fallback（`MEMA_FORCE_HASH_EMBEDDINGS=1`）或按 Memory 配置走 provider。
+- 本地文件（mema artifacts）：face 证据图像落盘在 `.artifacts/memorization/evidence_media/...`，图里只存 `image_ref`。
+
+### 最小验证（你像 12 岁那样照抄就行）
+```bash
+# 1) 看 ingest 状态（小 JSON）
+curl -s http://127.0.0.1:8081/ingest/Jian.mp4/status | python -c "import json,sys; d=json.load(sys.stdin); print(d['status'], d.get('progress',{}).get('build_graph',{}))"
+
+# 2) 看 Memory 服务是否连通 Neo4j/Qdrant
+curl -s http://127.0.0.1:8000/health
+
+# 3) 从 Memory Graph API 拉 segments（证明 Neo4j 里有东西）
+curl -s -H 'X-Tenant-ID: test_tenant' 'http://127.0.0.1:8000/graph/v0/segments?source_id=Jian.mp4&limit=5'
+
+# 4) 从 Memory Vector API 做一次检索（证明 Qdrant 有东西）
+curl -s -H 'X-Tenant-ID: test_tenant' -X POST http://127.0.0.1:8000/search \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"speaker","top_k":5,"filters":{"run_id":"Jian.mp4","memory_domain":"general","user_id":"subject_1"}}'
+```
 
 ## Hypothesis 层（现状与缺口）
 - 图模型已支持 hypothesis：`GraphEdge.layer`/`GraphEdge.status` 可用于区分 `fact/semantic/identity/hypothesis` 与 `candidate` 等状态。
