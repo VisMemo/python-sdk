@@ -135,6 +135,7 @@ curl -s http://127.0.0.1:8081/ingest/Jian.mp4/status
 ```bash
 curl -s -H 'X-Tenant-ID: test_tenant' \
   'http://127.0.0.1:8000/graph/v0/segments?source_id=Jian.mp4&limit=5'
+# 说明：`source_id` 与 ingest 的 `run_id` 对齐；如果你用自定义 run_id，请在这里用同一个值过滤。
 ```
 
 ### 5.2 Vector（Qdrant）里能不能搜到东西

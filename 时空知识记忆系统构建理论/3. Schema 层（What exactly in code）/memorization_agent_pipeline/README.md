@@ -5,6 +5,7 @@
 ## 架构概览（P0-P0.1）
 - 入口：`Orchestrator.process_video` / DAG 模式。关键步骤：`probe → slice → vision → audio → fusion → build_graph → semantic_enhance → write_memory → report`。
 - 上下文路由：`routing_ctx` 注入三键（tenant_id/user_id/memory_domain/run_id）+ 开关（enable_diarization/object/scene/llm_semantic/identity）。
+- 图谱分区键：`source_id` 对齐 `routing_ctx.run_id`（默认 `run_id=os.path.basename(video_path)`），确保“一次 run 对应一张图”。
 - 视听抽取：
   - Vision：`VisionExtractor` 生成 face/object/scene 证据；面向 graph 的稳定 ID（hash of source/segment/frame/bbox/label），object 仅白名单晋升为 Entity(OBJECT)。
   - Audio：`AudioExtractor` 生成 voice evidence（embedding+voice_tag）与 ASR utterance（time span），为后续 SPOKEN_BY 建边。
@@ -107,6 +108,7 @@ curl -s http://127.0.0.1:8000/health
 
 # 3) 从 Memory Graph API 拉 segments（证明 Neo4j 里有东西）
 curl -s -H 'X-Tenant-ID: test_tenant' 'http://127.0.0.1:8000/graph/v0/segments?source_id=Jian.mp4&limit=5'
+# 如果你 ingest 时传了自定义 `run_id`（例如 `demo-run-1`），这里的 `source_id` 也用同一个值。
 
 # 4) 从 Memory Vector API 做一次检索（证明 Qdrant 有东西）
 curl -s -H 'X-Tenant-ID: test_tenant' -X POST http://127.0.0.1:8000/search \
