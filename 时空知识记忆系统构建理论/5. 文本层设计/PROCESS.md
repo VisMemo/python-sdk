@@ -42,3 +42,22 @@
 - **验证（Test）**
   - 文档变更；功能回归参见：
     - `python -m pytest -q modules/memory/tests/unit/test_retrieval_dialog_v2.py`
+
+---
+
+## 2025-12-21 — 文本写入三段式管线（去噪 → 价值标注（原文无损）→ 建图写入）
+
+- **范围**
+  - `docs/时空知识记忆系统构建理论/5. 文本层设计/对话会话三段式写入管线_施工规范.md`
+  - `开发者API 说明文档.md`
+- **决策（Why）**
+  - 开发者/Agent 的“上下文”格式无法统一（messages/trace/控制台导出文本混杂），若直接喂 LLM 抽取会导致成本爆炸、噪声污染与不可回归；
+  - 必须先把输入变成确定性的 `turns[]`，再用 LLM 做“筛选+治理标注”，最后才进入 TKG 抽取与写入；
+  - “过滤可以有损，但被保留的原话必须无损”：凡写入/建图的内容必须逐字可追溯到 turn（可程序校验）。
+- **实现（What/How）**
+  - 明确三段式：Stage1（启发式/确定性去噪）→ Stage2（LLM 价值标注：importance/TTL/证据等级，且 `span.text_exact` 必须等于 turn 子串）→ Stage3（复用现有 TKG pipeline 建图写入，并无损透传治理标签）；
+  - 补充开发者 API 文档：推荐在“会话结束时”调用一次 `session_write`（SDK），并明确 turns 输入规范（role/speaker/timestamp）。
+- **验证（Test）**
+  - 本次为文档变更；实现阶段建议增加：
+    - Stage2 输出校验器单测（span 子串一致性/字段合法性）
+    - adapter 单测（AI Studio/OpenAI messages → CanonicalTurn）
