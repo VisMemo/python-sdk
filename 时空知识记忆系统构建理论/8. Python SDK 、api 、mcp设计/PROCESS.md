@@ -95,3 +95,30 @@
 ### 测试/验证
 
 - 本次为设计与验收用例文档更新，不涉及代码实现与自动化测试。
+
+## 2025-12-22：对齐“现有 HTTP 端口”与“SDK 高阶端口（ingest/retrieval）”规划
+
+### 完成内容
+
+- 新增对齐文档：`HTTP端口现状与SDK对接规划_v0.md`
+  - 列出 `modules/memory/api/server.py` 当前已暴露的全部 HTTP 端口分类（核心读写/图/高成本/配置与管理）。
+  - 明确当前缺口：缺少 `POST /ingest/dialog/v1` 与 `POST /retrieval/dialog/v2`（以及 job/session 状态端点），导致高阶链路只能 in-proc 调用。
+  - 明确施工后新增端口（方案 A）：`POST /ingest/dialog/v1` + `GET /ingest/jobs/{job_id}` + `GET /ingest/sessions/{session_id}` + `POST /retrieval/dialog/v2`。
+  - 给出 SDK 与后端交互时序与职责边界：append 本地缓存、commit 异步入队、retrieval 每轮召回、策略在服务端版本化。
+
+### 测试/验证
+
+- 本次为端口规划与文档口径对齐，不涉及代码实现与自动化测试。
+
+## 2025-12-22：确认对外 SDK 包名为 `omem`
+
+### 变更内容
+
+- 更新施工规范：`客户端SDK_会话提交与重型抽取写入_施工规范_v0.md`
+  - 写死对外发布的 import name：`omem`（全小写），作为稳定入口。
+- 更新端口对接文档：`HTTP端口现状与SDK对接规划_v0.md`
+  - 明确 SDK（`omem`）与后端端口（`/ingest/...`、`/retrieval/...`）的默认对接关系。
+
+### 测试/验证
+
+- 本次为文档口径与命名对齐，不涉及代码实现与自动化测试。

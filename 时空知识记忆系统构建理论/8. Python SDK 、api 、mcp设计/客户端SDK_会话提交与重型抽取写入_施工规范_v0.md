@@ -51,6 +51,11 @@
 
 > 目标：开发者的代码只需要掌握 `append` 与 `commit`，其余能力通过 `status`/`wait` 获得。
 
+### 3.0 对外包名（硬约束）
+
+- 对外发布的 Python 包名（import name）统一为：`omem`（全小写）。
+- 仓库内实现位于 `modules/memory` 范围内，但对开发者暴露 `omem.*` 作为稳定入口。
+
 ### 3.1 关键对象
 
 #### 3.1.1 `MemoryClient`
@@ -92,6 +97,8 @@
 ### 3.2 开发者使用流程（伪代码）
 
 ```python
+from omem import MemoryClient
+
 client = MemoryClient(
     base_url="http://memory:8000",
     tenant_id="t1",
