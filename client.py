@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+import json
+import time
+import uuid
+from dataclasses import dataclass
+from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+import httpx
+
+from omem.types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, SessionStatusV1
+
+
+class OmemClientError(RuntimeError):
+    pass
+
+
+def _normalize_base_url(base_url: str) -> str:
+    u = str(base_url or "").strip()
+    if not u:
+        raise ValueError("base_url is required")
+    return u.rstrip("/")
+
+
+def _normalize_user_tokens(user_tokens: Sequence[str]) -> List[str]:
+    out = [str(x).strip() for x in (user_tokens or []) if str(x).strip()]
+    if not out:
+        raise ValueError("user_tokens must be non-empty")
+    # Stable order for idempotency keys/markers.
+    return list(sorted(dict.fromkeys(out)))
+
+
+def _turn_id_from_index(i: int) -> str:
+    if i <= 0:
+        raise ValueError("turn index must be >= 1")
+    return f"t{i:04d}"
+
+
+def _as_jsonable_turn(t: CanonicalTurnV1) -> Dict[str, Any]:
+    attachments: List[Dict[str, Any]] = []
+    for a in (t.attachments or [])[:]:
+        attachments.append(
+            {
+                "type": a.type,
+                "name": a.name,
+                "truncated": bool(a.truncated),
+                "sha256": a.sha256,
+                "ref": a.ref,
+            }
+        )
+    return {
+        "turn_id": t.turn_id,
+        "role": t.role,
+        "name": t.name,
+        "timestamp_iso": t.timestamp_iso,
+        "text": t.text,
+        "attachments": (attachments if attachments else None),
+        "meta": (dict(t.meta) if isinstance(t.meta, dict) else None),
+    }
+
+
+def _coerce_job_status(payload: Dict[str, Any]) -> JobStatusV1:
+    return JobStatusV1(
+        job_id=str(payload.get("job_id") or ""),
+        session_id=str(payload.get("session_id") or ""),
+        status=str(payload.get("status") or ""),
+        attempts=(dict(payload.get("attempts") or {}) if isinstance(payload.get("attempts"), dict) else None),
+        next_retry_at=(str(payload.get("next_retry_at")) if payload.get("next_retry_at") else None),
+        last_error=(dict(payload.get("last_error") or {}) if isinstance(payload.get("last_error"), dict) else None),
+        metrics=(dict(payload.get("metrics") or {}) if isinstance(payload.get("metrics"), dict) else None),
+    )
+
+
+def _coerce_session_status(payload: Dict[str, Any]) -> SessionStatusV1:
+    return SessionStatusV1(
+        session_id=str(payload.get("session_id") or ""),
+        latest_job_id=(str(payload.get("latest_job_id")) if payload.get("latest_job_id") else None),
+        latest_status=(str(payload.get("latest_status")) if payload.get("latest_status") else None),
+        cursor_committed=(str(payload.get("cursor_committed")) if payload.get("cursor_committed") else None),
+    )
+
+
+@dataclass(frozen=True)
+class CommitHandle:
+    client: "MemoryClient"
+    job_id: str
+    session_id: str
+    commit_id: str
+
+    def status(self) -> JobStatusV1:
+        return self.client.get_job(self.job_id)
+
+    def wait(self, *, timeout_s: float = 30.0, poll_interval_s: float = 0.5) -> JobStatusV1:
+        deadline = time.time() + float(timeout_s)
+        last: Optional[JobStatusV1] = None
+        while True:
+            last = self.status()
+            if str(last.status).upper() == "COMPLETED":
+                return last
+            if time.time() >= deadline:
+                return last
+            time.sleep(float(poll_interval_s))
+
+
+class SessionBuffer:
+    def __init__(
+        self,
+        *,
+        client: "MemoryClient",
+        session_id: str,
+        cursor_last_committed: Optional[str] = None,
+    ) -> None:
+        sid = str(session_id or "").strip()
+        if not sid:
+            raise ValueError("session_id is required")
+        self._client = client
+        self.session_id = sid
+        self.cursor_last_committed = cursor_last_committed
+        self._turns: List[CanonicalTurnV1] = []
+        self._next_turn_index = 1
+
+    def append_turn(
+        self,
+        *,
+        role: str,
+        text: str,
+        timestamp_iso: Optional[str] = None,
+        name: Optional[str] = None,
+        attachments: Optional[Iterable[CanonicalAttachmentV1]] = None,
+        meta: Optional[Dict[str, Any]] = None,
+        turn_id: Optional[str] = None,
+    ) -> CanonicalTurnV1:
+        r = str(role or "").strip().lower()
+        if r not in ("user", "assistant", "tool", "system"):
+            raise ValueError("role must be one of: user|assistant|tool|system")
+        t = str(text or "")
+        if not t.strip():
+            raise ValueError("text is empty")
+
+        if turn_id is None:
+            turn_id = _turn_id_from_index(self._next_turn_index)
+            self._next_turn_index += 1
+        else:
+            turn_id = str(turn_id).strip()
+            if not turn_id:
+                raise ValueError("turn_id is empty")
+            # Best-effort bump next index if it looks like our canonical format.
+            if turn_id.startswith("t") and turn_id[1:].isdigit():
+                try:
+                    idx = int(turn_id[1:])
+                    self._next_turn_index = max(self._next_turn_index, idx + 1)
+                except Exception:
+                    pass
+
+        turn = CanonicalTurnV1(
+            turn_id=turn_id,
+            role=r,  # type: ignore[arg-type]
+            name=(str(name).strip() if name else None),
+            timestamp_iso=(str(timestamp_iso).strip() if timestamp_iso else None),
+            text=t,
+            attachments=(list(attachments) if attachments is not None else None),
+            meta=(dict(meta) if isinstance(meta, dict) else None),
+        )
+        self._turns.append(turn)
+        return turn
+
+    def turns(self) -> List[CanonicalTurnV1]:
+        return list(self._turns)
+
+    def commit(self, *, commit_id: Optional[str] = None) -> CommitHandle:
+        delta = self._delta_turns()
+        if not delta:
+            # Treat as a no-op commit but still return a handle-like object for uniform call sites.
+            cid = str(commit_id or uuid.uuid4())
+            return CommitHandle(client=self._client, job_id="", session_id=self.session_id, commit_id=cid)
+        cid = str(commit_id or uuid.uuid4())
+        handle = self._client.ingest_dialog_v1(
+            session_id=self.session_id,
+            turns=delta,
+            commit_id=cid,
+            base_turn_id=(self.cursor_last_committed or None),
+        )
+        # Client-side cursor advances optimistically to the last submitted turn.
+        self.cursor_last_committed = delta[-1].turn_id
+        return handle
+
+    def sync_cursor_from_server(self) -> Optional[str]:
+        ss = self._client.get_session(self.session_id)
+        self.cursor_last_committed = ss.cursor_committed
+        if ss.cursor_committed and ss.cursor_committed.startswith("t") and ss.cursor_committed[1:].isdigit():
+            try:
+                idx = int(ss.cursor_committed[1:])
+                self._next_turn_index = max(self._next_turn_index, idx + 1)
+            except Exception:
+                pass
+        return self.cursor_last_committed
+
+    def _delta_turns(self) -> List[CanonicalTurnV1]:
+        base = str(self.cursor_last_committed or "").strip()
+        if not base:
+            return list(self._turns)
+        out: List[CanonicalTurnV1] = []
+        for t in self._turns:
+            if t.turn_id > base:
+                out.append(t)
+        return out
+
+
+class MemoryClient:
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        tenant_id: str,
+        user_tokens: Sequence[str],
+        memory_domain: str = "dialog",
+        api_token: Optional[str] = None,
+        timeout_s: float = 30.0,
+        http: Optional[httpx.Client] = None,
+    ) -> None:
+        self.base_url = _normalize_base_url(base_url)
+        self.tenant_id = str(tenant_id or "").strip()
+        if not self.tenant_id:
+            raise ValueError("tenant_id is required")
+        self.user_tokens = _normalize_user_tokens(user_tokens)
+        self.memory_domain = str(memory_domain or "dialog").strip() or "dialog"
+        self.api_token = (str(api_token).strip() if api_token else None)
+        self._timeout_s = float(timeout_s)
+        self._http = http or httpx.Client(timeout=self._timeout_s)
+
+    def close(self) -> None:
+        self._http.close()
+
+    def session(self, *, session_id: str, sync_cursor: bool = False) -> SessionBuffer:
+        buf = SessionBuffer(client=self, session_id=session_id)
+        if sync_cursor:
+            try:
+                buf.sync_cursor_from_server()
+            except Exception:
+                # Cursor sync is best-effort.
+                pass
+        return buf
+
+    def ingest_dialog_v1(
+        self,
+        *,
+        session_id: str,
+        turns: Sequence[CanonicalTurnV1],
+        commit_id: Optional[str] = None,
+        base_turn_id: Optional[str] = None,
+        client_meta: Optional[Dict[str, Any]] = None,
+    ) -> CommitHandle:
+        sid = str(session_id or "").strip()
+        if not sid:
+            raise ValueError("session_id is required")
+        cid = str(commit_id or uuid.uuid4())
+        body: Dict[str, Any] = {
+            "session_id": sid,
+            "user_tokens": list(self.user_tokens),
+            "memory_domain": str(self.memory_domain),
+            "turns": [_as_jsonable_turn(t) for t in turns],
+            "commit_id": cid,
+            "cursor": {"base_turn_id": (str(base_turn_id).strip() if base_turn_id else None)},
+            "client_meta": (dict(client_meta) if isinstance(client_meta, dict) else None),
+        }
+        payload = self._request_json(
+            "POST",
+            "/ingest/dialog/v1",
+            json_body=body,
+        )
+        job_id = str(payload.get("job_id") or "").strip()
+        return CommitHandle(client=self, job_id=job_id, session_id=sid, commit_id=cid)
+
+    def get_job(self, job_id: str) -> JobStatusV1:
+        jid = str(job_id or "").strip()
+        if not jid:
+            raise ValueError("job_id is required")
+        payload = self._request_json("GET", f"/ingest/jobs/{jid}")
+        return _coerce_job_status(payload)
+
+    def get_session(self, session_id: str) -> SessionStatusV1:
+        sid = str(session_id or "").strip()
+        if not sid:
+            raise ValueError("session_id is required")
+        payload = self._request_json("GET", f"/ingest/sessions/{sid}")
+        return _coerce_session_status(payload)
+
+    def retrieve_dialog_v2(
+        self,
+        *,
+        query: str,
+        session_id: Optional[str] = None,
+        topk: int = 30,
+        task: str = "GENERAL",
+        debug: bool = False,
+        with_answer: bool = False,
+        backend: str = "tkg",
+        tkg_explain: bool = True,
+        entity_hints: Optional[Sequence[str]] = None,
+        time_hints: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        q = str(query or "").strip()
+        if not q:
+            raise ValueError("query is required")
+        sid = str(session_id).strip() if session_id else None
+        body: Dict[str, Any] = {
+            "tenant_id": str(self.tenant_id),
+            "user_tokens": list(self.user_tokens),
+            "memory_domain": str(self.memory_domain),
+            "run_id": sid,
+            "query": q,
+            "strategy": "dialog_v2",
+            "topk": int(topk),
+            "task": str(task or "GENERAL"),
+            "debug": bool(debug),
+            "with_answer": bool(with_answer),
+            "backend": str(backend or "tkg"),
+            "tkg_explain": bool(tkg_explain),
+            "entity_hints": (list(entity_hints) if entity_hints else None),
+            "time_hints": (dict(time_hints) if isinstance(time_hints, dict) else None),
+        }
+        return self._request_json("POST", "/retrieval/dialog/v2", json_body=body)
+
+    def _headers(self) -> Dict[str, str]:
+        h = {"X-Tenant-ID": str(self.tenant_id)}
+        if self.api_token:
+            h["X-API-Token"] = str(self.api_token)
+        return h
+
+    def _request_json(self, method: str, path: str, *, json_body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        url = f"{self.base_url}{path}"
+        headers = self._headers()
+        try:
+            resp = self._http.request(method.upper(), url, headers=headers, json=json_body)
+        except Exception as exc:
+            raise OmemClientError(f"http_request_failed: {type(exc).__name__}: {exc}") from exc
+
+        if resp.status_code >= 400:
+            snippet = ""
+            try:
+                snippet = resp.text[:500]
+            except Exception:
+                snippet = ""
+            raise OmemClientError(f"http_{resp.status_code}: {snippet}")
+
+        try:
+            return resp.json()  # type: ignore[no-any-return]
+        except Exception:
+            # Keep raw for diagnostics.
+            try:
+                txt = resp.text
+            except Exception:
+                txt = "<unreadable>"
+            raise OmemClientError(f"invalid_json_response: {txt[:500]}")
+
