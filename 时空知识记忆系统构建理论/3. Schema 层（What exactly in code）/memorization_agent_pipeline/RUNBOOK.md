@@ -1,8 +1,14 @@
 # Runbook：启动全链路服务并跑通 `Jian.mp4`
 
-目标：启动 **Qdrant + Neo4j + Memory Service + Memorization Agent Ops**，然后通过 `POST /ingest` 跑完整条 “视频→图→存储” 管线，并用 “小状态接口” 轮询进度。
+目标：启动 **Qdrant + Neo4j + Memory Service + Memorization Agent Ops**，然后通过 `POST /ingest` 跑 “视频→写入” 管线，并用 “小状态接口” 轮询进度。
+
+> **状态说明（未上线生产）**：`/ingest` 入口已注入 Graph 写入；GraphUpsert 失败会让任务 `failed`。  
+> 需要 `MEMA_MEMORY_API_URL`（推荐）；旧变量仍可用但会告警。
 
 > 约定：本文所有命令都在仓库根目录执行（`MOYAN_AGENT_INFRA/`）。
+
+> [!NOTE]
+> `/ingest` 现在会写 Graph；如果 Memory API 不可达，会直接失败而不是“成功但图为空”。
 
 ---
 
@@ -50,13 +56,18 @@ curl -s http://127.0.0.1:8000/health
 ### 3.1 P0（推荐）配置：不依赖 LLM、不拉 OpenCLIP、向量用 hash fallback
 
 ```bash
-MEMA_MEMORY_MODE=http MEMA_MEMORY_BASE_URL=http://127.0.0.1:8000 \
+MEMA_MEMORY_MODE=http \
+MEMA_MEMORY_API_URL=http://127.0.0.1:8000 \
 MEMA_PIPELINE_LLM_SEMANTIC_ENABLE=false \
 MEMA_PIPELINE_ENABLE_CLIP_IMAGE=false \
 MEMA_FORCE_HASH_EMBEDDINGS=1 \
-MEMA_PIPELINE_ASR_DEVICE=cpu MEMA_VOICE_DEVICE=cpu \
+MEMA_PIPELINE_ASR_DEVICE=cpu \
+MEMA_VOICE_DEVICE=cpu \
 uv run python modules/memorization_agent/api/server.py
 ```
+
+> [!NOTE]
+> 推荐使用 `MEMA_MEMORY_API_URL`；`MEMA_MEMORY_BASE_URL` / `MEMA_MEMORY_API_BASE` 仍兼容但会告警。
 
 > 如果你的 GPU 环境完整（CUDA/cuDNN 都 OK），可以尝试把 `cpu` 改成 `cuda`。  
 > 但如果出现“挂住/卡死/初始化很久”，先回到 CPU，保证稳定跑通。
@@ -70,11 +81,13 @@ MEMA_LLM_MAX_IMAGES_PER_REQUEST=1 \
 MEMA_LLM_BATCH_MODE=single \
 MEMA_LLM_MAX_IMAGE_EDGE=512 \
 MEMA_LLM_JPEG_QUALITY=65 \
-MEMA_MEMORY_MODE=http MEMA_MEMORY_BASE_URL=http://127.0.0.1:8000 \
+MEMA_MEMORY_MODE=http \
+MEMA_MEMORY_API_URL=http://127.0.0.1:8000 \
 MEMA_PIPELINE_LLM_SEMANTIC_ENABLE=true \
 MEMA_PIPELINE_ENABLE_CLIP_IMAGE=false \
 MEMA_FORCE_HASH_EMBEDDINGS=1 \
-MEMA_PIPELINE_ASR_DEVICE=cpu MEMA_VOICE_DEVICE=cpu \
+MEMA_PIPELINE_ASR_DEVICE=cpu \
+MEMA_VOICE_DEVICE=cpu \
 uv run python modules/memorization_agent/api/server.py
 ```
 
@@ -91,7 +104,7 @@ curl -s http://127.0.0.1:8081/health
 
 ## 4. 触发 ingest（跑 `demo/data/Jian.mp4`）
 
-### 4.1 提交任务
+### 4.1 方式 A：使用 `/ingest` API
 
 ```bash
 curl -s -X POST http://127.0.0.1:8081/ingest \
@@ -109,7 +122,32 @@ curl -s -X POST http://127.0.0.1:8081/ingest \
 - `task_id`：通常就是你给的 `run_id`（这里是 `Jian.mp4`）
 - `status`：`queued`
 
-### 4.2 轮询状态（小接口，别用全量）
+### 4.2 方式 B：使用 `run_real_pipeline.py`（脚本直跑）
+
+```bash
+MEMA_MEMORY_MODE=http \
+MEMA_MEMORY_API_URL=http://127.0.0.1:8000 \
+MEMA_USER_ID=subject_1 \
+MEMA_MEMORY_DOMAIN=general \
+MEMA_RUN_ID=Jian.mp4 \
+MEMA_PIPELINE_LLM_SEMANTIC_ENABLE=false \
+MEMA_FORCE_HASH_EMBEDDINGS=1 \
+uv run python modules/memorization_agent/scripts/run_real_pipeline.py demo/data/Jian.mp4
+```
+
+### 4.3 方式 C：使用 `run_pipeline_stub.py`（轻量图写入验证）
+
+> 不跑重模型，直接用 stub 证据写 Graph v0，适合快速验证 GraphUpsert。
+
+```bash
+PYTHONPATH=. uv run python scripts/run_pipeline_stub.py \
+  --video demo/data/Jian.mp4 \
+  --tenant test_tenant \
+  --api http://127.0.0.1:8000 \
+  --entity person_1
+```
+
+### 4.4 轮询状态（小接口，别用全量）
 
 ```bash
 curl -s http://127.0.0.1:8081/ingest/Jian.mp4/status
@@ -128,17 +166,9 @@ curl -s http://127.0.0.1:8081/ingest/Jian.mp4/status
 
 ---
 
-## 5. 验证：数据确实写入 Neo4j/Qdrant 了
+## 5. 验证：数据确实写入了
 
-### 5.1 Graph（Neo4j）里有没有 segment
-
-```bash
-curl -s -H 'X-Tenant-ID: test_tenant' \
-  'http://127.0.0.1:8000/graph/v0/segments?source_id=Jian.mp4&limit=5'
-# 说明：`source_id` 与 ingest 的 `run_id` 对齐；如果你用自定义 run_id，请在这里用同一个值过滤。
-```
-
-### 5.2 Vector（Qdrant）里能不能搜到东西
+### 5.1 Vector（适用于 /ingest）
 
 ```bash
 curl -s -H 'X-Tenant-ID: test_tenant' -X POST http://127.0.0.1:8000/search \
@@ -154,11 +184,25 @@ curl -s -H 'X-Tenant-ID: test_tenant' -X POST http://127.0.0.1:8000/search \
   }'
 ```
 
+### 5.2 Graph（/ingest 也会写入）
+
+```bash
+curl -s -H 'X-Tenant-ID: test_tenant' \
+  'http://127.0.0.1:8000/graph/v0/segments?source_id=Jian.mp4&limit=5'
+# 说明：`source_id` 与 ingest 的 `run_id` 对齐；如果你用自定义 run_id，请在这里用同一个值过滤。
+```
+
+> 如果返回空数组：检查 `run_id/source_id` 是否一致，或 Memory 服务是否可达。
+
 ---
 
 ## 常见坑（别浪费时间）
 
-- 你在 shell 里写 `MEMA_PIPELINE_ASR_DEVICE=cuda` **但没 export**，然后直接 `python ...server.py`：那变量其实没生效。  
-  正确写法要么 `export MEMA_...=...`，要么像本文这样 `VAR=... VAR2=... command`。
-- `GET /ingest/{task_id}` 很大是正常的：它是“全量回放数据”，不是状态接口。
-- Memory Graph API 读接口一般需要 `X-Tenant-ID`；不带会 401/422/空结果（取决于配置）。
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| 任务 `failed` 且提示 `graph_write_failed` | Memory API 不可达/鉴权失败 | 检查 `MEMA_MEMORY_API_URL`/Token/网络 |
+| `404` 查询任务状态 | ops server 重启后任务表清空 | 重新 `POST /ingest` |
+| 环境变量没生效 | shell 里写 `VAR=xxx` 但没 export | 用 `VAR=... VAR2=... command` 或先 `export` |
+| `GET /ingest/{task_id}` 返回一大坨 | 用错了接口（那是全量回放） | 用 `/ingest/{task_id}/status` |
+| Memory API 返回 401/422 | 缺 `X-Tenant-ID` header | 加上 `-H 'X-Tenant-ID: xxx'` |
+| 使用 `MEMA_MEMORY_API_URL` 但无效 | Memory API 不可达或地址写错 | 确认服务地址/端口/Token |
