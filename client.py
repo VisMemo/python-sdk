@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 import time
 import uuid
 from dataclasses import dataclass
@@ -12,6 +13,51 @@ from omem.types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, Sess
 
 
 class OmemClientError(RuntimeError):
+    pass
+
+
+class OmemHttpError(OmemClientError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int,
+        error: Optional[str] = None,
+        request_id: Optional[str] = None,
+        retry_after_s: Optional[int] = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = int(status_code)
+        self.error = error
+        self.request_id = request_id
+        self.retry_after_s = retry_after_s
+
+
+class OmemAuthError(OmemHttpError):
+    pass
+
+
+class OmemForbiddenError(OmemHttpError):
+    pass
+
+
+class OmemRateLimitError(OmemHttpError):
+    pass
+
+
+class OmemQuotaExceededError(OmemHttpError):
+    pass
+
+
+class OmemPayloadTooLargeError(OmemHttpError):
+    pass
+
+
+class OmemValidationError(OmemHttpError):
+    pass
+
+
+class OmemServerError(OmemHttpError):
     pass
 
 
@@ -78,6 +124,14 @@ def _coerce_session_status(payload: Dict[str, Any]) -> SessionStatusV1:
         latest_status=(str(payload.get("latest_status")) if payload.get("latest_status") else None),
         cursor_committed=(str(payload.get("cursor_committed")) if payload.get("cursor_committed") else None),
     )
+
+
+@dataclass(frozen=True)
+class RetryConfig:
+    max_retries: int = 3
+    max_wait_seconds: float = 30.0
+    base_backoff_seconds: float = 0.5
+    jitter: bool = True
 
 
 @dataclass(frozen=True)
@@ -216,6 +270,7 @@ class MemoryClient:
         memory_domain: str = "dialog",
         api_token: Optional[str] = None,
         timeout_s: float = 30.0,
+        retry_config: Optional[RetryConfig] = None,
         http: Optional[httpx.Client] = None,
     ) -> None:
         self.base_url = _normalize_base_url(base_url)
@@ -226,6 +281,7 @@ class MemoryClient:
         self.memory_domain = str(memory_domain or "dialog").strip() or "dialog"
         self.api_token = (str(api_token).strip() if api_token else None)
         self._timeout_s = float(timeout_s)
+        self._retry = retry_config or RetryConfig()
         self._http = http or httpx.Client(timeout=self._timeout_s)
 
     def close(self) -> None:
@@ -325,31 +381,131 @@ class MemoryClient:
         h = {"X-Tenant-ID": str(self.tenant_id)}
         if self.api_token:
             h["X-API-Token"] = str(self.api_token)
+            h["Authorization"] = f"Bearer {self.api_token}"
         return h
 
     def _request_json(self, method: str, path: str, *, json_body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
         headers = self._headers()
-        try:
-            resp = self._http.request(method.upper(), url, headers=headers, json=json_body)
-        except Exception as exc:
-            raise OmemClientError(f"http_request_failed: {type(exc).__name__}: {exc}") from exc
+        request_id = _ensure_request_id(headers)
 
-        if resp.status_code >= 400:
-            snippet = ""
+        attempt = 0
+        while True:
             try:
-                snippet = resp.text[:500]
-            except Exception:
-                snippet = ""
-            raise OmemClientError(f"http_{resp.status_code}: {snippet}")
+                resp = self._http.request(method.upper(), url, headers=headers, json=json_body)
+            except Exception as exc:
+                if _should_retry_exc(exc) and attempt < self._retry.max_retries:
+                    _sleep_backoff(self._retry, attempt, None)
+                    attempt += 1
+                    continue
+                raise OmemClientError(f"http_request_failed: {type(exc).__name__}: {exc}") from exc
 
+            if resp.status_code >= 400:
+                err = _http_error_from_response(resp, request_id=request_id)
+                if _should_retry_status(resp.status_code) and attempt < self._retry.max_retries:
+                    _sleep_backoff(self._retry, attempt, err.retry_after_s)
+                    attempt += 1
+                    continue
+                raise err
+
+            try:
+                return resp.json()  # type: ignore[no-any-return]
+            except Exception:
+                # Keep raw for diagnostics.
+                try:
+                    txt = resp.text
+                except Exception:
+                    txt = "<unreadable>"
+                raise OmemClientError(f"invalid_json_response: {txt[:500]}")
+
+
+def _ensure_request_id(headers: Dict[str, str]) -> str:
+    for key in ("X-Request-ID", "x-request-id"):
+        if key in headers and str(headers[key]).strip():
+            return str(headers[key]).strip()
+    rid = f"req_{uuid.uuid4().hex}"
+    headers["X-Request-ID"] = rid
+    return rid
+
+
+def _should_retry_status(status_code: int) -> bool:
+    return int(status_code) in (429, 502, 503, 504)
+
+
+def _should_retry_exc(exc: Exception) -> bool:
+    return isinstance(exc, httpx.RequestError)
+
+
+def _sleep_backoff(cfg: RetryConfig, attempt: int, retry_after_s: Optional[int]) -> None:
+    if retry_after_s is not None and retry_after_s >= 0:
+        wait = float(retry_after_s)
+    else:
+        wait = float(cfg.base_backoff_seconds) * (2 ** attempt)
+        if cfg.jitter:
+            wait = random.uniform(0.0, max(wait, 0.0))
+    wait = min(wait, float(cfg.max_wait_seconds))
+    if wait <= 0:
+        return
+    time.sleep(wait)
+
+
+def _parse_retry_after(resp: httpx.Response) -> Optional[int]:
+    raw = resp.headers.get("Retry-After") or resp.headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        return max(0, int(float(raw)))
+    except Exception:
+        return None
+
+
+def _parse_error_payload(resp: httpx.Response) -> Dict[str, Any]:
+    try:
+        payload = resp.json()
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _http_error_from_response(resp: httpx.Response, *, request_id: Optional[str]) -> OmemHttpError:
+    payload = _parse_error_payload(resp)
+    err_code = None
+    message = None
+    if payload:
+        err_code = payload.get("error") or payload.get("detail")
+        message = payload.get("message")
+    snippet = ""
+    if not err_code and not message:
         try:
-            return resp.json()  # type: ignore[no-any-return]
+            snippet = resp.text[:500]
         except Exception:
-            # Keep raw for diagnostics.
-            try:
-                txt = resp.text
-            except Exception:
-                txt = "<unreadable>"
-            raise OmemClientError(f"invalid_json_response: {txt[:500]}")
+            snippet = ""
+    detail = message or err_code or snippet or "request_failed"
+    retry_after = _parse_retry_after(resp)
+    status = int(resp.status_code)
 
+    cls: type[OmemHttpError]
+    if status == 401:
+        cls = OmemAuthError
+    elif status == 403:
+        cls = OmemForbiddenError
+    elif status == 402:
+        cls = OmemQuotaExceededError
+    elif status == 429:
+        cls = OmemRateLimitError
+    elif status == 413:
+        cls = OmemPayloadTooLargeError
+    elif status == 400:
+        cls = OmemValidationError
+    elif status >= 500:
+        cls = OmemServerError
+    else:
+        cls = OmemHttpError
+
+    return cls(
+        f"http_{status}: {detail}",
+        status_code=status,
+        error=(str(err_code) if err_code else None),
+        request_id=(resp.headers.get("X-Request-ID") or resp.headers.get("x-request-id") or request_id),
+        retry_after_s=retry_after,
+    )
