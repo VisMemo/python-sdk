@@ -341,6 +341,19 @@ Memory Server MUST 配置为：
 - 网关：记录 `request` 事件（HTTP 状态码、延迟、bytes、path）。  
 - 数据面：记录 `llm` 与 `write` 事件（tokens、provider、stage、nodes/points 产出）。
 
+### 9.2.1 Usage WAL 触发点（必须写死）
+当前（v1）触发点定义如下，避免“记账条件模糊”导致漏记/误记：
+
+- **写入完成时（Stage3 成功）**：写入一条 `write` 事件  
+  - 事件来源：Memory Server  
+  - 事件字段：`tenant_id/api_key_id/request_id/job_id/session_id/metrics`  
+  - 计量内容：`archived_turns/kept_turns/graph_nodes_written/vector_points_written`
+
+> 重要说明  
+> - **目前不计 LLM token 与 QA**：LLM 调用尚未纳入统一 usage 事件；未来扩展时必须新增 `llm` 事件类型与 token 字段。  
+> - **目前不计 retrieval**：`/retrieval/dialog/v2` 只计请求数（由网关限流，不计 WAL）。  
+> - 如需对 `search/graph_search` 做资源成本计量，应新增 `request` 事件类型而非复用 `write`。
+
 ### 9.3 数据面用量上报协议（控制面必须提供）
 
 **Endpoint**
