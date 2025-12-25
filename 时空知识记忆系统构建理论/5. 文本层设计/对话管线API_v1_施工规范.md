@@ -73,6 +73,7 @@
 
 ### 3.2 strategy（固定枚举，后续只加不改）
 - `dialog_v1`：对话检索/对话记忆（文本为主）
+- `dialog_v2`：对话检索/对话记忆（**Event-first + 多路并行召回 + 有界单向证据扩散**；见 7.4）
 - `video_v1`：视频/生活流检索（多模态）
 
 > 后续迭代用 `dialog_v2` / `video_v2` 追加，不改旧策略语义。
@@ -306,13 +307,35 @@
 
 ### 7.2 入参契约（建议形态）
 - `query: str`
-- `strategy: "dialog_v1" | "video_v1"`
+- `strategy: "dialog_v1" | "dialog_v2" | "video_v1"`
 - `tenant_id: str`
 - `user_id: str`
 - `product_id: str | None`
 - `topk: int = 30`
 - `memory_api: { base_url, auth_headers?, timeout_s? }`
 - `rerank: { enabled: bool = False, model?, top_n?, ... }`（预留；默认关闭）
+
+#### dialog_v2 可选参数（新增，但必须有稳定默认）
+> 目标：避免“路由/分类器”成为依赖；所有子路都并行跑，结果统一进入 Event 候选池（K=50），再做去重与补位。
+
+- `candidate_k: int = 50`
+  - dialog_v2 的统一候选池大小（固定默认 50；不与 `topk` 绑定）
+- `seed_topn: int = 15`
+  - 证据扩散（explain）最多对多少个 Event seed 执行（上限必须硬控）
+- `e_vec_oversample: int = 3`
+  - E_vec（向量 utterance index）超采样倍数：请求 `candidate_k * e_vec_oversample`，用于对冲“多 utterance 命中同一 event”导致的去重坍缩
+- `graph_cap: int = 15`
+  - E_graph 进入候选池的上限（防止倒排召回吞掉全部名额）
+- `rrf_k: int = 60`
+  - RRF 融合的平滑常数（越大越“去极值”）
+- `qa_evidence_cap_l2: int = 12`
+- `qa_evidence_cap_l4: int = 12`
+- `enable_entity_route: bool = True`
+- `enable_time_route: bool = True`
+- `entity_hints: list[str] | None = None`
+  - 可选：上层若已知可用实体标签（例如 `["Caroline","Melanie","face1"]`），可直接提供以避免从 query 里猜（不要求一定有）
+- `time_hints: {start_iso?: str, end_iso?: str, timezone?: str} | None = None`
+  - 可选：上层若已经解析出绝对时间区间，直接提供；否则 dialog_v2 将 best-effort 解析（并允许降级）
 
 #### rerank LLM 配置（预留 BYOK）
 - `llm: { provider, model, api_key, ... } | None`
@@ -392,9 +415,176 @@
 - 行为（对齐 `benchmark/adapters/moyan_memory_qa_adapter.py::_generate_answer`）：
   - system_prompt：使用 `QA_SYSTEM_PROMPT_GENERAL`（必须由单测锁死与 benchmark 一致）
   - user_prompt：按 “Question/Task type/Evidence 列表” 拼装（Top-15，类型映射 Fact/Reference/Event）
-  - 输出：`answer: str`
+- 输出：`answer: str`
 
-### 7.4 strategy = `video_v1`（V1 先做最小实现）
+---
+
+## 7.4 strategy = `dialog_v2`（API 升级：多路并行 + Event 候选池 + 单向证据扩散）
+
+> 你必须先理解一件事：**Graph-first ≠ 向量语义检索。**
+>
+> - `POST /graph/v1/search` 的第一轮召回是 **Neo4j fulltext（倒排）**：它擅长“名字/face1/关键词短语”等字面锚点，但不保证同义改写的语义近似。
+> - `E_vec`（Qdrant utterance index）才是 embedding 语义近似召回：它擅长 paraphrase，但会带来向量噪声。
+>
+> dialog_v2 的策略是：**两者并行 + 动态补位**，避免“精准但太少”浪费候选池，也避免“只向量漏斗”错过图结构能力。
+
+### 7.4.1 总体目标与硬约束（MUST）
+- 统一候选单位：**Event**（候选池只收 `event_id`）
+- 多路并行召回，不依赖路由：
+  - Route_E：Event 召回（Graph-first + 向量补召回）
+  - Route_K：Knowledge/Fact 召回（向量语义；用于时间与综合性事实锚点）
+  - Route_EN：Entity 视角召回（若能从 query/hints 拿到实体标签）
+  - Route_T：TimeSlice 视角召回（若能拿到可靠绝对时间锚；否则必须降级）
+- 候选池大小固定：`candidate_k=50`
+- 任何扩散必须有界：`seed_topn` 与 `neighbor_cap_per_seed` 必须硬控
+- 永不浪费候选池容量：E_graph 命中少时，E_vec 必须自动补位填满（经过去重后尽量填满 50）
+
+### 7.4.2 三路并行命令定义（Executed Calls）
+
+#### A) Route_E：Event 召回（两子路并行；都进入候选池）
+1) `E_graph`：Graph-first（精准、少）
+   - API：`POST /graph/v1/search`
+   - 入参：`query`, `topk=candidate_k`, 可选 `source_id`
+   - 输出：`[{event_id, score, ...}]`
+2) `E_vec`：Utterance 向量召回（语义、足量）
+   - API：`POST /search`
+   - filters（固定约束，必须写死）：
+     - `tenant_id`
+     - `user_id=principals`, `user_match="all"`（强隔离）
+     - `memory_domain="dialog"`
+     - `memory_type=["semantic"]`（索引条目是 semantic）
+     - `modality=["text"]`
+     - `source=["tkg_dialog_utterance_index_v1"]`
+   - 参数：
+     - `topk = candidate_k * e_vec_oversample`（默认 150）
+     - `expand_graph=false`（这一步只负责候选生成，不扩散）
+   - 输出：utterance hits（每条必须携带 `metadata.tkg_event_id`）
+   - 映射：`event_id = metadata.tkg_event_id`（无此字段则丢弃该 hit）
+
+> 关键：E_graph 与 E_vec 都可能命中同一 event，合并阶段必须以 `event_id` 去重，并保留两路的分数贡献。
+
+#### B) Route_K：Knowledge/Fact 召回（语义锚点；用于时序与综合性问题）
+
+目标：把“被抽取过的事实陈述”作为候选入口，反向映射回 Event。
+
+- API：`POST /search`
+- filters（固定约束，必须写死）：
+  - `tenant_id`
+  - `user_id=principals`, `user_match="all"`
+  - `memory_domain="dialog"`
+  - `memory_type=["semantic"]`
+  - `modality=["text"]`
+  - `source=["locomo_text_pipeline"]`
+- 输出：fact hits（每条包含 `source_turn_ids` 与 `source_sample_id`）
+- 映射：`event_id = <sample_id>_<turn_id>`（与 benchmark 的 `_extract_fact_hits_v2` 对齐）
+
+> 解释：L2/L4/L5 类型问题很容易缺失显式时间锚，Knowledge/Fact 是唯一可控的“时间/关系表述层”。
+
+#### C) Route_EN：Entity 视角召回（best-effort；允许为空）
+目标：当用户问题显式提到“Caroline/face1/某个 speaker label”时，用实体视角拉出其相关事件集合。
+
+输入来源（顺序优先）：
+1) `entity_hints`（若调用方提供）
+2) 从 query 中 best-effort 抽取实体标签：
+   - 规则：优先匹配 `face\\d+`、英文专名 token（首字母大写连续词）、以及调用方可选提供的已知 speaker 列表（若上层有）
+   - **禁止**把“他/她/那个人”等指代当作实体标签（指代消解不在检索层解决）
+
+实体 ID 获取（两种模式；实现优先级顺序）：
+1) **索引解析（推荐，用于“名字不完全一致/存在别名/face1 等标签不确定”的场景）**
+   - 需要图侧提供“实体解析”能力（建议新增端点；若未提供则跳过该步骤）：
+     - `GET /graph/v0/entities/resolve?name=<query>&limit=...&type=PERSON`
+     - 返回：`[{entity_id, name, score}]`
+   - 说明：这是文本索引（fulltext/等价），不是向量检索；用于把 query 里的实体字符串映射到图里的 `Entity.id`。
+2) **确定性生成（fallback，用于 speaker label 已知且与写入规则一致的场景）**
+   - 使用写入时同一规则生成 speaker entity_id（与 `dialog_tkg_graph_v1` 对齐）：
+     - `entity_id = uuid5_like("tkg.dialog.entity", key="tenant|domain|user_tokens|speaker_label")`
+   - `speaker_label` 约定等于 `Entity.name`（允许是 `face1` 这种未命名标签）。
+
+事件拉取（需要图查询能力；若不可用则该路返回空并在 debug 标记）：
+- 推荐 API：`GET /graph/v0/entities/{entity_id}/timeline?limit=...`
+- 兼容 API（若 timeline 不可用）：`GET /graph/v0/events?entity_id=...&limit=...`
+- 输出：一组与该实体相关的 event_id（或可映射到 event_id 的证据/segment）
+
+#### D) Route_T：TimeSlice 视角召回（强依赖绝对时间；必须自适应降级）
+
+**现实约束（必须写死）**：
+- 在对话写入中，`TimeSlice.t_abs_start/end` 只有在 turns 提供 `timestamp_iso` 或调用方提供 `reference_time_iso` 时才有值；否则为 None。
+- 因此：当数据缺失绝对时间时，任何“昨天/上周/日期”的匹配都不可靠，Route_T 必须降级为“不参与候选生成”。
+
+Route_T 启用条件：
+1) 能从 `time_hints` 或 query 解析得到绝对时间区间 `(start_iso,end_iso)`，且
+2) 图侧 TimeSlice 存在可用 `t_abs_start/end`
+
+建议的图查询能力（若服务端未提供则 Route_T 返回空，并在 debug 标记 `time_route_unavailable`）：
+- `GET /graph/v0/timeslices/range?kind=dialog_session&start_iso=...&end_iso=...&limit=...`
+  - 返回匹配的 timeslice_ids + event_ids（沿 `COVERS_EVENT`）
+
+降级策略（必须）：
+- 若 Route_T 不可用：该路返回空，不得尝试“list_timeslices 全量扫库”。
+- L2 的时序需求由后续的 **受限 Event→Event 补候选** 承担（见 7.4.5）。
+
+### 7.4.3 候选池合并与“动态补位”（核心算法，必须写死）
+
+定义：
+- `K = candidate_k`（默认 50）
+- 统一候选 key：`event_id`
+
+步骤：
+1) 并行执行多路（Route_E/K/EN/T），得到若干 `event_candidates`（全部归一到 event_id）。
+2) 合并去重（按 event_id）：
+   - 对每个 event_id，记录 `score_E_graph / score_E_vec / score_K_vec / score_EN / score_T`（缺失则为 0），以及 `sources[]` 与 `reasons[]`。
+3) **图路上限（Graph Cap）**：
+   - 只保留 `E_graph` 的 Top-G（默认 `G=15`，且 `G<=K`），避免倒排召回吞掉整个池子。
+4) **RRF 融合打分（必须）**：
+   - 对每一路按分数排序得到 rank；
+   - `score = Σ_w (1 / (rrf_k + rank)) + recency_weight * recency`；
+   - 默认 `rrf_k=60`，路由权重 `graph/vec/knowledge/entity/time` 独立配置。
+5) **自动补位**：用 RRF 分数从其余候选填满剩余名额。
+   - 绝不浪费槽位：只要 `E_vec`/`K_vec` 有足够 unique event，就必须把池子尽量填满到 K。
+
+> 注意：补位不等于“只用 E_vec”。EN/T 仍可进入池子，但默认权重更低；它们更重要的价值是提供“锚点理由/证据结构”，而不是抢占大量名额。
+
+### 7.4.4 单向证据扩散（explain 驱动，一跳为主）
+
+目标：对候选 Event 生成可解释证据包（utterance/knowledge/entity/timeslice/...），并生成 graph_signal 参与重排。
+
+- seeds：候选池按 `candidate_score` 取 top `seed_topn`（默认 15）
+- 对每个 seed：
+  - 调用 `graph_explain_event_evidence(tenant_id,event_id)`
+  - 只抽取一跳邻居（`UtteranceEvidence/Knowledge/Entity/TimeSlice/Place`），并对邻居数量做 cap（`neighbor_cap_per_seed`）
+
+**QA 证据压缩（仅在 with_answer=true 时）**：
+- L2/L4 任务默认只取前 12 条证据喂给 QA（降低噪声与“相似句”误导）。
+
+### 7.4.5 可选增强：受限 Event→Event 补候选（仅用于时序题的“邻近事件”）
+当（且仅当）需要时序补全时，允许对 seeds 做“非常有限”的 Event→Event 扩展：
+- 关系白名单：`NEXT_EVENT`（可选 `CAUSES`）
+- 每个 seed 最多补 `prev=1`、`next=1` 两个 event（硬上限 2）
+- 补出来的 event 进入候选池但标记 `source="E_graph_hop"`，并计入 K 的填充逻辑（仍去重）
+
+### 7.4.6 融合打分（建议默认；必须可解释）
+**RRF 融合 + recency + graph_signal：**
+`candidate_score = Σ_w (1 / (rrf_k + rank)) + w_recency*recency + w_signal*graph_signal`
+- 默认建议：
+  - `w_graph >= w_vec`（E_graph 少但准，作为强锚点）
+  - `w_knowledge` 用于强化“已抽取事实”的时间/关系表述
+  - `w_en/w_t` 较小（作为锚点加分，不主导）
+- 输出 debug 必须包含每路贡献，便于调参。
+
+### 7.4.7 debug（必须输出；否则无法排障）
+`debug.executed_calls` 必须至少包含：
+- `event_search_graph`（/graph/v1/search）：count/latency_ms/error
+- `event_search_utterance_vec`（/search source=tkg_dialog_utterance_index_v1）：hits/unique_event_ids/latency_ms/error
+- `fact_search`（/search source=locomo_text_pipeline）：count/latency_ms/error
+- `entity_route`：entity_labels_used、events_found、latency_ms、skipped_reason（若为空）
+- `time_route`：time_window、timeslices_found、events_found、latency_ms、skipped_reason（若为空）
+- `tkg_explain_event_evidence`：seeds、enriched、latency_ms
+
+另外，`debug.plan` 必须包含：`candidate_k/seed_topn/graph_cap/rrf_k`。
+
+---
+
+### 7.5 strategy = `video_v1`（V1 先做最小实现）
 - 只调用一次 `/search`：
   - `filters.tenant_id = tenant_id`
   - `filters.user_id = principals`
@@ -456,6 +646,8 @@
 - [ ] tenant 强隔离：`X-Tenant-ID` + `filters.tenant_id` 双保险
 - [ ] BYOK：provider/model/api_key 透传到抽取/（可选）QA/（可选）rerank
 - [ ] llm_policy 两种行为在两函数里一致
+- [ ] `dialog_v2`：多路并行召回（E/K/EN/T）+ Event 候选池（K=50）+ Graph Cap + RRF 融合 + 动态补位 + 去重 + explain 有界扩散（不破坏 dialog_v1）
+- [ ] 图侧前置能力：Entity.name 可检索（fulltext/等价索引）+ TimeSlice 绝对时间可用时支持范围查询（缺失时允许降级）
 
 ### 10.2 建议测试用例（至少这些）
 - [ ] `session_write` 在 `llm_policy=require` 且无 key 时硬失败
