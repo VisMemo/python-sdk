@@ -72,7 +72,7 @@ uv run python modules/memorization_agent/api/server.py
 > 如果你的 GPU 环境完整（CUDA/cuDNN 都 OK），可以尝试把 `cpu` 改成 `cuda`。  
 > 但如果出现“挂住/卡死/初始化很久”，先回到 CPU，保证稳定跑通。
 
-### 3.2 启用 VLM（OpenRouter：`qwen/qwen-2.5-vl-7b-instruct:free`）
+### 3.2 启用 VLM（OpenRouter：`qwen/qwen3-vl-8b-instruct`）
 
 前提：你已经在 `modules/memory/config/.env` 写好了 `OPENROUTER_API_KEY`（以及可选 `OPENROUTER_BASE_URL`）。
 
@@ -83,7 +83,9 @@ MEMA_LLM_MAX_IMAGE_EDGE=512 \
 MEMA_LLM_JPEG_QUALITY=65 \
 MEMA_MEMORY_MODE=http \
 MEMA_MEMORY_API_URL=http://127.0.0.1:8000 \
+MEMA_DEMO_STRICT=1 \
 MEMA_PIPELINE_LLM_SEMANTIC_ENABLE=true \
+MEMA_PIPELINE_ENABLE_DIARIZATION=1 \
 MEMA_PIPELINE_ENABLE_CLIP_IMAGE=false \
 MEMA_FORCE_HASH_EMBEDDINGS=1 \
 MEMA_PIPELINE_ASR_DEVICE=cpu \
@@ -92,7 +94,7 @@ uv run python modules/memorization_agent/api/server.py
 ```
 
 > VLM 打开后会明显变慢（需要发请求给 OpenRouter），这是正常的。
-> 免费模型常有严格限流；建议保持 `single + 2 images`，否则容易 429。
+> 由于 `MEMA_DEMO_STRICT=1`，若未启用 VLM/diarization 将直接拒绝 ingest。
 
 健康检查：
 
