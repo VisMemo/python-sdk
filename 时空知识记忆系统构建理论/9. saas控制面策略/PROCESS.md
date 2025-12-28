@@ -118,6 +118,61 @@
 
 - 本次为文档规范补齐，不涉及代码变更与自动化测试。
 
+## 2025-12-26：补齐“对接就绪检查表”（SDK↔网关↔数据面）
+
+### 完成内容
+
+- 更新 `SaaS接线规范_omem_SDK_网关_控制面_数据面_v1.md`：
+  - 新增 `12.0 对接就绪检查表（仅 SDK ↔ 网关 ↔ 数据面）`；
+  - 将 SDK→网关（公网）、网关→数据面（内网）、数据面实际接收的 body 字段三段契约用表格写死，避免联调时互相猜；
+  - 明确哪些字段必须由网关覆盖/注入（internal_jwt、X-Request-ID、可选签名），以及公网默认必须 `with_answer=false`（BYOK 不等于服务端代答）。
+
+### 测试/验证
+
+- 本次为接线规范文档完善，不涉及代码变更与自动化测试。
+
+## 2025-12-26：LLM 用量计量落地文档同步
+
+### 完成内容
+
+- 更新 `SaaS缺口清单与施工计划_v1.md`：
+  - 将 “LLM token 计量缺失” 移出缺口清单，新增到“已对齐能力”；
+  - 标注数据面已完成 Stage2/Stage3/retrieval_qa 的 `llm` 事件写入，SDK/Agent 上报仍待施工。
+- 更新 `SaaS接线规范_omem_SDK_网关_控制面_数据面_v1.md`：
+  - 修正 9.2.1 的说明，明确 LLM tokens 已计量，tokens 缺失时记录 `tokens_missing=true`；
+  - 明确 retrieval 请求仍由网关计量，数据面不写 WAL。
+
+### 测试/验证
+
+- 本次为文档同步更新，不涉及代码变更与自动化测试。
+
+## 2025-12-26：Usage Sink API 落地（控制面最小闭环）
+
+### 完成内容
+
+- 新增 `POST /internal/usage/events`（`modules/memorization_agent/api/saas_server.py`）：
+  - 支持批量写入、幂等去重；
+  - 可选 `MEMA_INTERNAL_KEY` 做内部保护；
+  - 接收 `payload` 或 `metrics` 字段并落库。
+- 新增 `adapters/usage_event_store.py`（SQLite/InMemory 版本）。
+
+### 测试/验证
+
+- `python -m pytest modules/memorization_agent/tests/unit/test_saas_usage_sink.py -q`
+
+## 2025-12-26：网关 request 计量组件落地（参考实现）
+
+### 完成内容
+
+- 新增 `modules/saas_gateway/usage.py`：
+  - `UsageRequestMiddleware` 采集 path/method/status/latency/bytes；
+  - `HttpUsageEventEmitter` 对接 `POST /internal/usage/events`。
+- 为网关接入提供最小可复用组件与单测。
+
+### 测试/验证
+
+- `python -m pytest modules/saas_gateway/tests/unit/test_usage_middleware.py -q`
+
 ## 2025-12-25：SaaS 缺口清单与施工计划（v1）
 
 ### 完成内容
@@ -131,3 +186,24 @@
 ### 测试/验证
 
 - 本次为策略/执行清单文档，不涉及代码变更与自动化测试。
+
+## 2025-12-27：SDK BYOK 用量上报补齐
+
+### 完成内容
+
+- 更新 `SaaS缺口清单与施工计划_v1.md`：
+  - 新增 “SDK BYOK 用量上报（已落地）”，并移出缺口清单；
+  - Phase 1 中标注 SDK 已提供 `LLMUsageReporter`。
+- 新增 usage_daily 聚合能力：
+  - 控制面新增 `usage_daily` 表与内部聚合接口；
+  - 缺口清单中将 usage_daily 升级为 Phase 1 必须项并标注已落地。
+- 更新 `SaaS接线规范_omem_SDK_网关_控制面_数据面_v1.md`：
+  - `llm` 事件幂等 key 增加 `request_id` 作为 BYOK 场景的 fallback。
+  - 补充数据面 `MEMORY_API_WITH_ANSWER_ENABLED` 作为公网禁用开关。
+- 控制面新增 usage_daily 聚合调度器（可选后台任务），默认关闭以避免轻量部署成本。
+- 更新 `SDK使用说明.md`：
+  - 补齐 BYOK 用量上报的示例与说明。
+
+### 测试/验证
+
+- 本次包含 SDK 侧实现与单测，测试在 `omem/PROCESS.md` 与 `modules/memory/PROCESS.md` 中记录。

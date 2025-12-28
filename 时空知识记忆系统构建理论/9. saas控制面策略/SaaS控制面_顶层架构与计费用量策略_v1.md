@@ -441,6 +441,8 @@ ON CONFLICT (tenant_id, d) DO UPDATE SET
   vector_points_written_total = EXCLUDED.vector_points_written_total;
 ```
 
+> 工程落地：控制面提供 `POST /internal/usage/aggregate/daily`，并支持通过 `MEMA_USAGE_AGGREGATE_ENABLED` 启动后台聚合。
+
 ---
 
 ## 9. 套餐默认值（Free / Pro / Enterprise）

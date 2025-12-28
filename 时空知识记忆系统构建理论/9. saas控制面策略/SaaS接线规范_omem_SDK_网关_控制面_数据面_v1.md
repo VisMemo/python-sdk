@@ -204,6 +204,7 @@ flowchart TB
 控制面必须提供内部端口（仅内网可达）：
 
 - `POST /internal/usage/events`（批量写入 usage events，幂等）
+- `POST /internal/usage/aggregate/daily`（触发聚合 usage_daily，建议由 cron/worker 调用）
 
 ### 5.4 Rate Limit 响应头（网关必须返回）
 
@@ -324,7 +325,7 @@ Memory Server MUST 配置为：
 | event_type | event_id 建议 |
 |---|---|
 | request | `hash(tenant_id + api_key_id + request_id)` |
-| llm | `hash(tenant_id + api_key_id + job_id + stage + call_index)` |
+| llm | `hash(tenant_id + api_key_id + (job_id or request_id) + stage + call_index)` |
 | write | `hash(tenant_id + job_id + write)` |
 
 ---
@@ -350,8 +351,8 @@ Memory Server MUST 配置为：
   - 计量内容：`archived_turns/kept_turns/graph_nodes_written/vector_points_written`
 
 > 重要说明  
-> - **目前不计 LLM token 与 QA**：LLM 调用尚未纳入统一 usage 事件；未来扩展时必须新增 `llm` 事件类型与 token 字段。  
-> - **目前不计 retrieval**：`/retrieval/dialog/v2` 只计请求数（由网关限流，不计 WAL）。  
+> - **已计 LLM token 与 QA**：数据面在 Stage2/Stage3 以及 `with_answer=true` 的 `retrieval_qa` 写入 `llm` 事件；tokens 缺失时记录 `tokens_missing=true`。  
+> - **仍不计 retrieval 请求**：`/retrieval/dialog/v2` 仅由网关计 request（数据面不写 WAL）。  
 > - 如需对 `search/graph_search` 做资源成本计量，应新增 `request` 事件类型而非复用 `write`。
 
 ### 9.3 数据面用量上报协议（控制面必须提供）
@@ -395,6 +396,8 @@ Memory Server MUST 配置为：
   "deduped": 3
 }
 ```
+
+> 数据面 WAL 当前使用 `metrics` 字段承载计量细节（stage/provider/model/tokens），对接控制面时可直接透传或在 Sink 侧映射为 `payload`。
 
 ### 9.4 数据面上报可靠性：WAL + 异步 Flush（短期必做）
 
@@ -477,6 +480,49 @@ SDK 可提供的扩展点（MAY）：
 ---
 
 ## 12. 端到端验收用例（E2E Checklist）
+
+### 12.0 对接就绪检查表（仅 SDK ↔ 网关 ↔ 数据面）
+
+> 目的：你们现在“只做数据面 + SDK”，控制面/网关由另一组同学做。  
+> 这张表把 **SDK 发送什么**、**网关必须覆盖/注入什么**、**数据面实际接收什么** 写死，避免联调时互相猜。
+
+#### 12.0.1 SDK → 网关（公网请求）MUST/SHOULD
+
+| 项 | MUST? | 位置 | SDK 当前形态 | 网关期望 | 备注 |
+|---|---|---|---|---|---|
+| Public API Key | MUST | Header `Authorization` | `Authorization: Bearer <api_token>` | 校验并解析 `tenant_id/api_key_id/scopes/plan` | SDK 也会发 `X-API-Token` 兼容头；网关必须以 `Authorization` 为准 |
+| `X-Request-ID` | SHOULD | Header | SDK 自动生成 | 贯穿全链路透传/回显 | 用于审计/用量幂等 key 的输入之一 |
+| `user_tokens[]` | MUST | Body | 必传 | 必传 | 租户内 end-user 隔离主轴 |
+| `session_id` | MUST（ingest） | Body | 必传 | 必传 | 会话维度幂等与索引关键字段 |
+| `commit_id` | SHOULD（ingest） | Body | 可传 | 建议传 | 用于幂等/去重；缺失则数据面会生成 uuid（但不利于外部对账） |
+| `with_answer` | MUST（retrieval） | Body | 默认 false | 强制 false（公网） | SaaS 默认 BYOK：服务端不应替用户调用模型生成答案（数据面可用 `MEMORY_API_WITH_ANSWER_ENABLED=false` 强制禁用） |
+| BYOK key | MUST NOT | Header/Body | 不应出现 | 不应出现 | BYOK 只在 SDK/Agent 进程内使用，绝不进网关/数据面 |
+
+#### 12.0.2 网关 → 数据面（内网转发）MUST/SHOULD
+
+| 项 | MUST? | 位置 | 网关动作 | 数据面实际读取 | 备注 |
+|---|---|---|---|---|---|
+| Internal JWT | MUST | Header `X-API-Token` | `X-API-Token: <internal_jwt>` | 数据面默认从 `X-API-Token` 读取 token（也支持 Authorization fallback） | JWT `sub` 会被写入 ingest job 的 `api_key_id` |
+| `tenant_id` | MUST | JWT claim | `tenant_id` | 数据面从 claims 提取 tenant | 不能信任 SDK 传的 tenant header |
+| `api_key_id` | MUST | JWT claim `sub` | `sub=<api_key_id>` | 写入 ingest job/audit 用 | 控制面对账的稳定主键 |
+| `scopes[]` | MUST | JWT claim | `scopes=["memory.read", "memory.write", ...]` | 数据面做 scope 兜底校验 | 网关也要做一次校验；数据面做兜底 |
+| `X-Request-ID` | MUST | Header | 透传或生成并回显 | 数据面记录到 ingest job 的 `request_id` | 用量/审计/排障的主线索 |
+| `X-Tenant-ID` | SHOULD | Header | 覆盖写入解析后的 tenant（仅兼容/日志） | 数据面在 auth disabled 模式会读 header | auth.enabled=true 时以 JWT claims 为准 |
+| 写入签名 | MAY→SHOULD | Header `X-Signature`/`X-Signature-Ts` | 若数据面开启 `signing.required=true`，网关必须注入签名 | 数据面写端点 `_enforce_security(require_signature=True)` | 不注入会导致 ingest 401（signature_required） |
+| `llm_policy`（ingest） | SHOULD | Body | 可按 plan 强制 `"best_effort"` 或 `"require"` | 数据面 `IngestDialogBody.llm_policy` | 影响 Stage2/Stage3 是否要求 LLM 配置；公网默认建议 best_effort |
+
+#### 12.0.3 数据面（Memory Server）接收的 Body 字段（以实现为准）
+
+> 这里列的是当前数据面真实 Pydantic 模型字段（`modules/memory/api/server.py`）。  
+> 网关转发时 **不得**删字段；未知字段要么保留要么丢弃都可，但不要破坏这些字段。
+
+- `POST /ingest/dialog/v1`（`IngestDialogBody`）
+  - MUST：`session_id`、`user_tokens[]`、`turns[]`
+  - SHOULD：`commit_id`、`cursor.base_turn_id`、`client_meta`、`llm_policy`
+- `POST /retrieval/dialog/v2`（`RetrievalDialogBody`）
+  - MUST：`query`、`user_tokens[]`
+  - SHOULD：`run_id`、`strategy`、`topk`、`debug`、`backend`、`tkg_explain`、`entity_hints`、`time_hints`
+  - MAY（公网默认禁用）：`with_answer=true`（会触发服务端 LLM 调用，不等于 BYOK）
 
 ### 12.1 最小闭环
 
