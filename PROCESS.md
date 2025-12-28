@@ -19,3 +19,20 @@
 - **验证（Test）**：
   - `.venv/bin/python -m pytest modules/memory/tests/unit/test_omem_sdk_http.py modules/memory/tests/unit/test_api_auth_security.py modules/memory/tests/unit/test_api_scope_coverage.py -q`
   - **结果**：通过（19 passed）。
+
+---
+
+## 2025-12-27 — SDK BYOK 用量上报（LLMUsageReporter）
+- **范围**：
+  - `omem/usage.py`：新增 `LLMUsageReporter`，负责 BYOK `llm` 用量上报。
+  - `omem/__init__.py`：导出 BYOK 相关 API（LLMAdapter/usage hook/reporting）。
+  - `SDK使用说明.md`：补齐 BYOK 用量上报示例。
+- **决策（Why）**：
+  - BYOK 发生在 SDK/Agent 进程内，控制面无法自动计量；
+  - 统一 SDK 侧上报入口，避免每个 Agent 手写 token 上报逻辑。
+- **实现（What/How）**：
+  - 事件结构与数据面一致（`event_type=llm` + `metrics`），并按 `tenant_id + (job_id/request_id) + stage + call_index` 生成幂等 `event_id`；
+  - 提供 `context()` 以复用 LLMAdapter 的 usage hook（可自动上报）。
+- **验证（Test）**：
+  - `.venv/bin/python -m pytest modules/memory/tests/unit/test_omem_sdk_byok_usage.py -q`
+  - **结果**：通过（2 passed）。
