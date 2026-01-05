@@ -377,6 +377,148 @@ class MemoryClient:
         }
         return self._request_json("POST", "/retrieval/dialog/v2", json_body=body)
 
+    # ========== TKG Graph API Methods ==========
+
+    def graph_resolve_entities(
+        self,
+        name: str,
+        *,
+        entity_type: Optional[str] = None,
+        limit: int = 20,
+    ) -> Dict[str, Any]:
+        """Resolve entity by name.
+
+        Args:
+            name: Entity name to resolve.
+            entity_type: Optional type filter (e.g., "person", "place").
+            limit: Maximum number of results.
+
+        Returns:
+            Dict with "items" list of resolved entities.
+        """
+        params: Dict[str, Any] = {"name": name, "limit": limit}
+        if entity_type:
+            params["type"] = entity_type
+        return self._request_json("GET", "/graph/v0/entities/resolve", params=params)
+
+    def graph_entity_timeline(
+        self,
+        entity_id: str,
+        *,
+        limit: int = 200,
+    ) -> Dict[str, Any]:
+        """Get timeline of events/evidences for an entity.
+
+        Args:
+            entity_id: Entity ID.
+            limit: Maximum number of results.
+
+        Returns:
+            Dict with timeline data.
+        """
+        return self._request_json(
+            "GET",
+            f"/graph/v0/entities/{entity_id}/timeline",
+            params={"limit": limit},
+        )
+
+    def graph_search_events(
+        self,
+        query: str,
+        *,
+        topk: int = 10,
+        source_id: Optional[str] = None,
+        include_evidence: bool = True,
+    ) -> Dict[str, Any]:
+        """Search events using fulltext/BM25.
+
+        Args:
+            query: Search query.
+            topk: Maximum number of results.
+            source_id: Optional source filter.
+            include_evidence: Whether to include evidence details.
+
+        Returns:
+            Dict with search results.
+        """
+        body: Dict[str, Any] = {
+            "query": query,
+            "topk": topk,
+            "include_evidence": include_evidence,
+        }
+        if source_id:
+            body["source_id"] = source_id
+        return self._request_json("POST", "/graph/v1/search", json_body=body)
+
+    def graph_list_events(
+        self,
+        *,
+        entity_id: Optional[str] = None,
+        place_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """List events with optional filters.
+
+        Args:
+            entity_id: Filter by entity involvement.
+            place_id: Filter by place.
+            limit: Maximum number of results.
+
+        Returns:
+            Dict with "items" list of events.
+        """
+        params: Dict[str, Any] = {"limit": limit}
+        if entity_id:
+            params["entity_id"] = entity_id
+        if place_id:
+            params["place_id"] = place_id
+        return self._request_json("GET", "/graph/v0/events", params=params)
+
+    def graph_timeslices_range(
+        self,
+        start: str,
+        end: str,
+        *,
+        granularity: Optional[str] = None,
+        limit: int = 100,
+    ) -> Dict[str, Any]:
+        """Query timeslices within a time range.
+
+        Args:
+            start: ISO format start time.
+            end: ISO format end time.
+            granularity: Optional granularity filter (e.g., "day", "hour").
+            limit: Maximum number of results.
+
+        Returns:
+            Dict with "items" list of timeslices.
+        """
+        params: Dict[str, Any] = {"start": start, "end": end, "limit": limit}
+        if granularity:
+            params["granularity"] = granularity
+        return self._request_json("GET", "/graph/v0/timeslices/range", params=params)
+
+    def graph_timeslice_events(
+        self,
+        timeslice_id: str,
+        *,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Get events within a specific timeslice.
+
+        Args:
+            timeslice_id: Timeslice ID.
+            limit: Maximum number of results.
+
+        Returns:
+            Dict with "items" list of events.
+        """
+        return self._request_json(
+            "GET",
+            f"/graph/v0/timeslices/{timeslice_id}/events",
+            params={"limit": limit},
+        )
+
     def _headers(self) -> Dict[str, str]:
         h = {"X-Tenant-ID": str(self.tenant_id)}
         if self.api_token:
@@ -384,7 +526,14 @@ class MemoryClient:
             h["Authorization"] = f"Bearer {self.api_token}"
         return h
 
-    def _request_json(self, method: str, path: str, *, json_body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        json_body: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         url = f"{self.base_url}{path}"
         headers = self._headers()
         request_id = _ensure_request_id(headers)
@@ -392,7 +541,7 @@ class MemoryClient:
         attempt = 0
         while True:
             try:
-                resp = self._http.request(method.upper(), url, headers=headers, json=json_body)
+                resp = self._http.request(method.upper(), url, headers=headers, json=json_body, params=params)
             except Exception as exc:
                 if _should_retry_exc(exc) and attempt < self._retry.max_retries:
                     _sleep_backoff(self._retry, attempt, None)

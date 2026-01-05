@@ -36,3 +36,58 @@
 - **验证（Test）**：
   - `.venv/bin/python -m pytest modules/memory/tests/unit/test_omem_sdk_byok_usage.py -q`
   - **结果**：通过（2 passed）。
+
+---
+
+## 2025-01-05 — SDK v2 高层 API 重构
+
+- **范围**：
+  - `omem/models.py`：新增强类型返回模型（MemoryItem, SearchResult, Entity, Event, AddResult）
+  - `omem/memory.py`：新增高层 Memory 和 Conversation 类
+  - `omem/client.py`：新增 TKG HTTP 方法（graph_resolve_entities, graph_entity_timeline, graph_search_events 等）
+  - `omem/__init__.py`：导出高层 API（Memory, Conversation, 强类型模型）
+  - `omem/tests/test_memory.py`：新增 23 个单元测试
+  - `SDK使用说明.md`：新增 Quick Start 和两种写入模式文档
+
+- **决策（Why）**：
+  - 原 MemoryClient 概念层次过多（client/session/buffer/handle/job），对开发者不友好
+  - 返回值全是 Dict，无法 IDE 补全，不够 Pythonic
+  - 需要暴露 TKG 图查询能力（omem 核心差异化）
+  - 需要兼容 OpenAI messages 格式（行业惯例）
+  - user_tokens 默认为 [tenant_id]（伴侣机器人场景简化）
+
+- **实现（What/How）**：
+  - **高层 API 设计原则**：
+    - 简单场景一行搞定：`mem.add("conv-001", messages)`
+    - 复杂场景保留控制：`conv.commit()` 显式提交
+    - 强类型返回值：`SearchResult` 支持迭代、bool 判断、`to_prompt()`
+  - **两种写入模式**：
+    - `add()`: 自动 commit（80% 场景）
+    - `conversation().commit()`: 显式 commit（批量控制）
+  - **TKG API 暴露**：
+    - `resolve_entity()`: 实体解析
+    - `get_entity_timeline()`: 实体时间线
+    - `search_events()`: 结构化事件搜索
+    - `get_events_by_time()`: 时间范围查询
+  - **错误处理**：
+    - `search(fail_silent=True)`: 静默返回空结果
+    - 默认抛出异常，明确错误边界
+  - **commit 语义保留**：
+    - 显式 commit 减少 TKG 图变更次数
+    - with 语句支持自动 commit（无异常时）
+    - 异常时不自动 commit，防止脏数据写入
+
+- **API 映射**：
+
+  | SDK 方法 | 后端端点 |
+  |----------|----------|
+  | `add()` | `POST /ingest/dialog/v1` |
+  | `search()` | `POST /retrieval/dialog/v2` |
+  | `resolve_entity()` | `GET /graph/v0/entities/resolve` |
+  | `get_entity_timeline()` | `GET /graph/v0/entities/{id}/timeline` |
+  | `search_events()` | `POST /graph/v1/search` |
+  | `get_events_by_time()` | `GET /graph/v0/timeslices/range` |
+
+- **验证（Test）**：
+  - `uv run python -m pytest omem/tests/test_memory.py -v`
+  - **结果**：23 passed（覆盖初始化、写入、commit 行为、搜索、错误处理）
