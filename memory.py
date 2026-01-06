@@ -75,7 +75,7 @@ class Memory:
         user_tokens: Optional[List[str]] = None,
         memory_domain: str = "dialog",
         timeout_s: float = 30.0,
-        auto_timestamp: bool = False,
+        auto_timestamp: bool = True,
     ) -> None:
         """Initialize Memory client.
 
@@ -87,7 +87,7 @@ class Memory:
             memory_domain: Memory domain. Defaults to "dialog".
             timeout_s: Request timeout in seconds.
             auto_timestamp: If True, auto-generate timestamp for messages
-                without explicit timestamp. Defaults to False.
+                without explicit timestamp. Defaults to True.
         """
         if not tenant_id:
             raise ValueError("tenant_id is required")
@@ -506,7 +506,7 @@ class Conversation:
         client: MemoryClient,
         conversation_id: str,
         sync_cursor: bool = True,
-        auto_timestamp: bool = False,
+        auto_timestamp: bool = True,
     ) -> None:
         """Initialize conversation buffer.
 
@@ -515,7 +515,7 @@ class Conversation:
             conversation_id: Unique identifier for the conversation.
             sync_cursor: Whether to sync cursor from server.
             auto_timestamp: If True, auto-generate timestamp for messages
-                without explicit timestamp.
+                without explicit timestamp. Defaults to True.
         """
         cid = str(conversation_id or "").strip()
         if not cid:
