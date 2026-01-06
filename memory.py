@@ -75,6 +75,7 @@ class Memory:
         user_tokens: Optional[List[str]] = None,
         memory_domain: str = "dialog",
         timeout_s: float = 30.0,
+        auto_timestamp: bool = False,
     ) -> None:
         """Initialize Memory client.
 
@@ -85,6 +86,8 @@ class Memory:
             user_tokens: User isolation tokens. Defaults to [tenant_id].
             memory_domain: Memory domain. Defaults to "dialog".
             timeout_s: Request timeout in seconds.
+            auto_timestamp: If True, auto-generate timestamp for messages
+                without explicit timestamp. Defaults to False.
         """
         if not tenant_id:
             raise ValueError("tenant_id is required")
@@ -94,6 +97,7 @@ class Memory:
         self._tenant_id = str(tenant_id).strip()
         self._user_tokens = user_tokens or [self._tenant_id]
         self._memory_domain = str(memory_domain or "dialog").strip()
+        self._auto_timestamp = bool(auto_timestamp)
 
         self._client = MemoryClient(
             base_url=endpoint,
@@ -176,6 +180,7 @@ class Memory:
             client=self._client,
             conversation_id=conversation_id,
             sync_cursor=sync_cursor,
+            auto_timestamp=self._auto_timestamp,
         )
 
     # ========== Search API ==========
@@ -501,6 +506,7 @@ class Conversation:
         client: MemoryClient,
         conversation_id: str,
         sync_cursor: bool = True,
+        auto_timestamp: bool = False,
     ) -> None:
         """Initialize conversation buffer.
 
@@ -508,6 +514,8 @@ class Conversation:
             client: MemoryClient instance.
             conversation_id: Unique identifier for the conversation.
             sync_cursor: Whether to sync cursor from server.
+            auto_timestamp: If True, auto-generate timestamp for messages
+                without explicit timestamp.
         """
         cid = str(conversation_id or "").strip()
         if not cid:
@@ -518,6 +526,7 @@ class Conversation:
         self._buffer: List[CanonicalTurnV1] = []
         self._next_turn_index = 1
         self._cursor_last_committed: Optional[str] = None
+        self._auto_timestamp = bool(auto_timestamp)
 
         if sync_cursor:
             self._sync_cursor_from_server()
@@ -553,7 +562,7 @@ class Conversation:
                 - role: "user", "assistant", "tool", or "system"
                 - content or text: Message content
                 - name: Optional speaker name
-                - timestamp: Optional ISO timestamp
+                - timestamp: Optional ISO timestamp (auto-generated if auto_timestamp=True)
 
         Example:
             >>> conv.add({"role": "user", "content": "Hello"})
@@ -573,9 +582,12 @@ class Conversation:
         turn_id = self._turn_id_from_index(self._next_turn_index)
         self._next_turn_index += 1
 
+        # Handle timestamp: use provided, or auto-generate if auto_timestamp is enabled
         timestamp_iso = message.get("timestamp") or message.get("timestamp_iso")
         if timestamp_iso:
             timestamp_iso = str(timestamp_iso).strip()
+        elif self._auto_timestamp:
+            timestamp_iso = _now_iso()
 
         turn = CanonicalTurnV1(
             turn_id=turn_id,
