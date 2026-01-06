@@ -321,7 +321,7 @@ class MemoryClient:
         }
         payload = self._request_json(
             "POST",
-            "/ingest/dialog/v1",
+            "/ingest",
             json_body=body,
         )
         job_id = str(payload.get("job_id") or "").strip()
@@ -375,7 +375,7 @@ class MemoryClient:
             "entity_hints": (list(entity_hints) if entity_hints else None),
             "time_hints": (dict(time_hints) if isinstance(time_hints, dict) else None),
         }
-        return self._request_json("POST", "/retrieval/dialog/v2", json_body=body)
+        return self._request_json("POST", "/retrieval", json_body=body)
 
     # ========== TKG Graph API Methods ==========
 
