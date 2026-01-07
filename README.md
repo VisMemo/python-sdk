@@ -13,12 +13,7 @@ pip install omem
 ```python
 from omem import Memory
 
-# Initialize
-mem = Memory(
-    endpoint="https://your-service.sealoshzh.site/api/v1/memory",
-    tenant_id="your-tenant",
-    api_key="qbk_xxx",
-)
+mem = Memory(api_key="qbk_xxx")  # That's it!
 
 # Save a conversation
 mem.add("conv-001", [
@@ -29,7 +24,7 @@ mem.add("conv-001", [
 # Search memories
 result = mem.search("我什么时候去西湖？")
 if result:
-    print(result.to_prompt())  # Formatted for LLM injection
+    print(result.to_prompt())
 ```
 
 ## API Reference
@@ -39,12 +34,20 @@ if result:
 Main class for interacting with the memory service.
 
 ```python
-mem = Memory(
-    endpoint="https://...",    # Memory service URL
-    tenant_id="your-tenant",   # Required
-    api_key="qbk_xxx",         # Required
-)
+# Minimal (just api_key)
+mem = Memory(api_key="qbk_xxx")
+
+# With user isolation (for multi-user apps)
+mem = Memory(api_key="qbk_xxx", user_id="user-123")
+
+# Self-hosted deployment
+mem = Memory(api_key="...", endpoint="https://my-instance.com/api/v1/memory")
 ```
+
+**Parameters:**
+- `api_key` — Your API key (required). Get one at [qbrain.ai](https://qbrain.ai)
+- `user_id` — Optional. Isolate memories per user in multi-user apps
+- `endpoint` — Optional. Override for self-hosted deployments
 
 ### `add(conversation_id, messages)`
 
@@ -104,6 +107,23 @@ For agent robustness, use `fail_silent=True`:
 result = mem.search("query", fail_silent=True)
 ```
 
+## Multi-User Apps
+
+Isolate memories per user:
+
+```python
+# Each user has their own memory space
+mem_alice = Memory(api_key="qbk_xxx", user_id="alice")
+mem_bob = Memory(api_key="qbk_xxx", user_id="bob")
+
+mem_alice.add("conv-1", [{"role": "user", "content": "I love coffee"}])
+mem_bob.add("conv-1", [{"role": "user", "content": "I love tea"}])
+
+# Searches are isolated
+mem_alice.search("what do I like?")  # → coffee
+mem_bob.search("what do I like?")    # → tea
+```
+
 ## Advanced: Conversation Buffer
 
 For fine-grained control over when to commit:
@@ -133,4 +153,3 @@ Additional APIs for TKG (Temporal Knowledge Graph) queries will be available in 
 ## License
 
 MIT
-

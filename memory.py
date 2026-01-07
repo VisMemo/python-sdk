@@ -21,6 +21,9 @@ from omem.client import MemoryClient, OmemClientError
 from omem.models import AddResult, Entity, Event, MemoryItem, SearchResult
 from omem.types import CanonicalTurnV1
 
+# Default cloud service endpoint
+DEFAULT_ENDPOINT = "https://zdfdulpnyaci.sealoshzh.site/api/v1/memory"
+
 
 def _parse_datetime(val: Any) -> Optional[datetime]:
     """Parse datetime from various formats."""
@@ -53,12 +56,8 @@ class Memory:
     Quick Start:
         >>> from omem import Memory
         >>> 
-        >>> # Initialize (cloud service)
-        >>> mem = Memory(
-        ...     endpoint="https://your-service.sealoshzh.site/api/v1/memory",
-        ...     tenant_id="your-tenant",
-        ...     api_key="qbk_xxx",
-        ... )
+        >>> # Initialize (only api_key required!)
+        >>> mem = Memory(api_key="qbk_xxx")
         >>> 
         >>> # Save conversation
         >>> mem.add("conv-001", [
@@ -79,44 +78,41 @@ class Memory:
 
     def __init__(
         self,
-        *,
-        endpoint: str = "http://localhost:8000",
-        tenant_id: str,
         api_key: str,
-        user_tokens: Optional[List[str]] = None,
-        memory_domain: str = "dialog",
+        *,
+        endpoint: Optional[str] = None,
+        user_id: Optional[str] = None,
         timeout_s: float = 30.0,
-        auto_timestamp: bool = True,
     ) -> None:
         """Initialize Memory client.
 
         Args:
-            endpoint: Memory service URL.
-            tenant_id: Tenant identifier (required).
-            api_key: API key for authentication (required).
-            user_tokens: User isolation tokens. Defaults to [tenant_id].
-            memory_domain: Memory domain. Defaults to "dialog".
+            api_key: API key for authentication (required). Get yours at qbrain.ai
+            endpoint: Memory service URL. Defaults to cloud service.
+                Override for self-hosted deployments.
+            user_id: User identifier for multi-user isolation within your app.
+                Use this to separate memories for different end users.
+                If not provided, all memories are shared under your API key.
             timeout_s: Request timeout in seconds.
-            auto_timestamp: If True, auto-generate timestamp for messages
-                without explicit timestamp. Defaults to True.
         """
-        if not tenant_id:
-            raise ValueError("tenant_id is required")
         if not api_key:
             raise ValueError("api_key is required")
 
-        self._tenant_id = str(tenant_id).strip()
-        self._user_tokens = user_tokens or [self._tenant_id]
-        self._memory_domain = str(memory_domain or "dialog").strip()
-        self._auto_timestamp = bool(auto_timestamp)
+        self._api_key = str(api_key).strip()
+        self._endpoint = str(endpoint or DEFAULT_ENDPOINT).rstrip("/")
+        self._user_id = str(user_id).strip() if user_id else None
+        self._timeout_s = float(timeout_s)
+        
+        # user_tokens for data isolation (gateway derives tenant from api_key)
+        self._user_tokens = [f"user:{self._user_id}"] if self._user_id else ["default"]
 
         self._client = MemoryClient(
-            base_url=endpoint,
-            tenant_id=self._tenant_id,
+            base_url=self._endpoint,
+            tenant_id="__from_api_key__",  # Gateway derives from api_key
             user_tokens=self._user_tokens,
-            memory_domain=self._memory_domain,
-            api_token=api_key,
-            timeout_s=timeout_s,
+            memory_domain="dialog",
+            api_token=self._api_key,
+            timeout_s=self._timeout_s,
         )
 
     # ========== Write API ==========
@@ -189,7 +185,7 @@ class Memory:
             client=self._client,
             conversation_id=conversation_id,
             sync_cursor=sync_cursor,
-            auto_timestamp=self._auto_timestamp,
+            auto_timestamp=True,
         )
 
     # ========== Search API ==========

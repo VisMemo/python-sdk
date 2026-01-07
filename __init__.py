@@ -1,17 +1,11 @@
 """omem - Python SDK for omem memory service.
 
-This package provides a simple, developer-friendly interface for
-storing and retrieving conversational memories.
+Give your AI agents long-term memory with just two lines of code.
 
 Quick Start:
     >>> from omem import Memory
     >>> 
-    >>> # Initialize (cloud service)
-    >>> mem = Memory(
-    ...     endpoint="https://your-service.sealoshzh.site/api/v1/memory",
-    ...     tenant_id="your-tenant",
-    ...     api_key="qbk_xxx",
-    ... )
+    >>> mem = Memory(api_key="qbk_xxx")  # That's it!
     >>> 
     >>> # Save conversation
     >>> mem.add("conv-001", [
@@ -24,7 +18,7 @@ Quick Start:
     >>> if result:
     ...     print(result.to_prompt())
 
-For more information, see: https://github.com/omem/python-sdk
+For more information, see: https://github.com/VisMemo/python-sdk
 """
 
 from omem.memory import Memory, Conversation
