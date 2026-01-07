@@ -45,9 +45,12 @@ mem = Memory(api_key="...", endpoint="https://my-instance.com/api/v1/memory")
 ```
 
 **Parameters:**
-- `api_key` — Your API key (required). Get one at [qbrain.ai](https://qbrain.ai)
-- `user_id` — Optional. Isolate memories per user in multi-user apps
-- `endpoint` — Optional. Override for self-hosted deployments
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `api_key` | ✅ Yes | - | Your API key. Get one at [qbrain.ai](https://qbrain.ai) |
+| `user_id` | No | `None` | Isolate memories per user in multi-user apps |
+| `endpoint` | No | Cloud service | Override for self-hosted deployments |
+| `timeout_s` | No | `30.0` | Request timeout in seconds |
 
 ### `add(conversation_id, messages)`
 
