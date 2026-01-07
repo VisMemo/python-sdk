@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import httpx
 
-from omem.types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, SessionStatusV1
+from .types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, SessionStatusV1
 
 
 class OmemClientError(RuntimeError):
@@ -520,10 +520,22 @@ class MemoryClient:
         )
 
     def _headers(self) -> Dict[str, str]:
-        h = {"X-Tenant-ID": str(self.tenant_id)}
+        h: Dict[str, str] = {}
+        
+        # Add tenant header (self-hosted mode)
+        if self.tenant_id and self.tenant_id != "__from_api_key__":
+            h["X-Tenant-ID"] = str(self.tenant_id)
+        
         if self.api_token:
-            h["X-API-Token"] = str(self.api_token)
-            h["Authorization"] = f"Bearer {self.api_token}"
+            token = str(self.api_token)
+            # SaaS mode: API keys starting with qbk_ use x-api-key header
+            if token.startswith("qbk_"):
+                h["x-api-key"] = token
+            else:
+                # Self-hosted mode: use X-API-Token and Bearer
+                h["X-API-Token"] = token
+                h["Authorization"] = f"Bearer {token}"
+        
         return h
 
     def _request_json(

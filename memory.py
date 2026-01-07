@@ -17,9 +17,9 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from omem.client import MemoryClient, OmemClientError
-from omem.models import AddResult, Entity, Event, MemoryItem, SearchResult
-from omem.types import CanonicalTurnV1
+from .client import MemoryClient, OmemClientError
+from .models import AddResult, Entity, Event, MemoryItem, SearchResult
+from .types import CanonicalTurnV1
 
 # Default cloud service endpoint
 DEFAULT_ENDPOINT = "https://zdfdulpnyaci.sealoshzh.site/api/v1/memory"

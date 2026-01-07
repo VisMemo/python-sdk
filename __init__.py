@@ -21,9 +21,9 @@ Quick Start:
 For more information, see: https://github.com/VisMemo/python-sdk
 """
 
-from omem.memory import Memory, Conversation
-from omem.models import MemoryItem, SearchResult, Entity, Event, AddResult
-from omem.client import (
+from .memory import Memory, Conversation
+from .models import MemoryItem, SearchResult, Entity, Event, AddResult
+from .client import (
     MemoryClient,
     SessionBuffer,
     CommitHandle,
@@ -38,7 +38,7 @@ from omem.client import (
     OmemValidationError,
     OmemServerError,
 )
-from omem.types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, SessionStatusV1
+from .types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, SessionStatusV1
 
 # Version
 __version__ = "2.1.0"
