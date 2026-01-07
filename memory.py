@@ -47,23 +47,34 @@ def _now_iso() -> str:
 class Memory:
     """High-level Memory API for omem.
 
-    Provides a simplified interface for storing and retrieving memories,
-    with support for OpenAI-compatible message format and TKG graph queries.
+    Provides a simple interface for storing and retrieving conversational
+    memories. Works with both cloud service (SaaS) and self-hosted deployments.
 
-    Example:
+    Quick Start:
+        >>> from omem import Memory
+        >>> 
+        >>> # Initialize (cloud service)
         >>> mem = Memory(
-        ...     endpoint="http://localhost:8000",
-        ...     tenant_id="xiaomo",
-        ...     api_key="sk-xxx",
+        ...     endpoint="https://your-service.sealoshzh.site/api/v1/memory",
+        ...     tenant_id="your-tenant",
+        ...     api_key="qbk_xxx",
         ... )
-        >>> # Simple write (auto-commit)
+        >>> 
+        >>> # Save conversation
         >>> mem.add("conv-001", [
-        ...     {"role": "user", "content": "Hello"},
-        ...     {"role": "assistant", "content": "Hi!"},
+        ...     {"role": "user", "content": "明天和 Caroline 去西湖"},
+        ...     {"role": "assistant", "content": "好的，我记住了"},
         ... ])
-        >>> # Search
-        >>> result = mem.search("greeting")
-        >>> print(result.to_prompt())
+        >>> 
+        >>> # Search memories
+        >>> result = mem.search("我什么时候去西湖？")
+        >>> if result:
+        ...     print(result.to_prompt())  # Formatted for LLM
+
+    Design Principles:
+        - Simple case: `add()` for one-line writes (fire-and-forget)
+        - Search: `search()` returns strongly-typed results
+        - Fail gracefully: Memory failures should not block agent conversations
     """
 
     def __init__(
@@ -114,36 +125,34 @@ class Memory:
         self,
         conversation_id: str,
         messages: Sequence[Dict[str, Any]],
-        *,
-        wait: bool = False,
-        timeout_s: float = 60.0,
-    ) -> AddResult:
-        """Add messages to memory with auto-commit.
+    ) -> None:
+        """Save conversation messages to memory.
 
-        This is the simplest way to store conversation data. Messages are
-        automatically committed to the server.
+        This is the primary way to store conversations. Messages are sent to
+        the server and processed asynchronously (typically ready for search
+        within 5-30 seconds).
 
         Args:
             conversation_id: Unique identifier for the conversation.
             messages: List of messages in OpenAI format:
                 [{"role": "user", "content": "Hello"}, ...]
                 Supported fields: role, content (or text), name, timestamp
-            wait: Whether to wait for server processing to complete.
-            timeout_s: Timeout for waiting (only used if wait=True).
-
-        Returns:
-            AddResult with conversation_id, message_count, job_id, completed.
 
         Example:
             >>> mem.add("conv-001", [
-            ...     {"role": "user", "content": "What's the weather?"},
-            ...     {"role": "assistant", "content": "It's sunny today."},
+            ...     {"role": "user", "content": "帮我订明天下午3点的会议室"},
+            ...     {"role": "assistant", "content": "好的，已预订明天下午3点的会议室A"},
             ... ])
+
+        Note:
+            - Call once per conversation (not per message) to avoid fragmentation
+            - Memories are searchable after backend processing completes
+            - This method is fire-and-forget; it doesn't wait for completion
         """
         conv = self.conversation(conversation_id)
         for msg in messages:
             conv.add(msg)
-        return conv.commit(wait=wait, timeout_s=timeout_s)
+        conv.commit()  # Fire and forget
 
     def conversation(
         self,
@@ -190,32 +199,35 @@ class Memory:
         query: str,
         *,
         limit: int = 10,
-        conversation_id: Optional[str] = None,
         fail_silent: bool = False,
     ) -> SearchResult:
         """Search memories.
 
         Args:
-            query: Search query.
-            limit: Maximum number of results.
-            conversation_id: Optional filter to specific conversation.
+            query: Search question (e.g., "我什么时候去西湖？")
+            limit: Maximum number of results (default: 10)
             fail_silent: If True, return empty result on error instead of raising.
+                Use this to ensure memory failures don't break your agent.
 
         Returns:
-            SearchResult with items and helper methods.
+            SearchResult with items and helper methods:
+            - Truthy when results exist: `if result: ...`
+            - Iterable: `for item in result: ...`
+            - Formattable: `result.to_prompt()` for LLM injection
 
         Example:
-            >>> result = mem.search("meeting tomorrow")
+            >>> result = mem.search("meeting with Caroline")
             >>> if result:
-            ...     print(result.to_prompt())
-            >>> for item in result:
-            ...     print(item.text, item.score)
+            ...     print(result.to_prompt())  # Inject into LLM context
+
+            >>> # With fail_silent for robustness
+            >>> result = mem.search("query", fail_silent=True)
+            >>> # Returns empty SearchResult on error, never raises
         """
         t0 = time.perf_counter()
         try:
             resp = self._client.retrieve_dialog_v2(
                 query=query,
-                session_id=conversation_id,
                 topk=limit,
                 with_answer=False,
             )

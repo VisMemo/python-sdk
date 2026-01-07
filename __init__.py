@@ -1,34 +1,38 @@
-"""omem public SDK API.
+"""omem - Python SDK for omem memory service.
 
-This package is the developer-facing Python SDK import surface.
-Implementation lives in-repo, but external users should import only from `omem`.
+This package provides a simple, developer-friendly interface for
+storing and retrieving conversational memories.
 
 Quick Start:
     >>> from omem import Memory
+    >>> 
+    >>> # Initialize (cloud service)
     >>> mem = Memory(
-    ...     endpoint="http://localhost:8000",
-    ...     tenant_id="xiaomo",
-    ...     api_key="sk-xxx",
+    ...     endpoint="https://your-service.sealoshzh.site/api/v1/memory",
+    ...     tenant_id="your-tenant",
+    ...     api_key="qbk_xxx",
     ... )
-    >>> # Write
+    >>> 
+    >>> # Save conversation
     >>> mem.add("conv-001", [
     ...     {"role": "user", "content": "Hello"},
     ...     {"role": "assistant", "content": "Hi!"},
     ... ])
-    >>> # Search
+    >>> 
+    >>> # Search memories
     >>> result = mem.search("greeting")
-    >>> print(result.to_prompt())
+    >>> if result:
+    ...     print(result.to_prompt())
+
+For more information, see: https://github.com/omem/python-sdk
 """
 
-# High-level API (recommended)
 from omem.memory import Memory, Conversation
 from omem.models import MemoryItem, SearchResult, Entity, Event, AddResult
-
-# Low-level API (for advanced use cases)
 from omem.client import (
-    CommitHandle,
     MemoryClient,
     SessionBuffer,
+    CommitHandle,
     RetryConfig,
     OmemClientError,
     OmemHttpError,
@@ -41,20 +45,14 @@ from omem.client import (
     OmemServerError,
 )
 from omem.types import CanonicalAttachmentV1, CanonicalTurnV1, JobStatusV1, SessionStatusV1
-from omem.usage import LLMUsageReporter, LLMUsageReporterConfig, OmemUsageError
-from modules.memory import (
-    LLMAdapter,
-    LLMUsageContext,
-    build_llm_from_config,
-    build_llm_from_env,
-    reset_llm_usage_context,
-    reset_llm_usage_hook,
-    set_llm_usage_context,
-    set_llm_usage_hook,
-)
+
+# Version
+__version__ = "2.1.0"
 
 __all__ = [
-    # High-level API (recommended)
+    # Version
+    "__version__",
+    # High-level API (recommended for most users)
     "Memory",
     "Conversation",
     "MemoryItem",
@@ -62,15 +60,7 @@ __all__ = [
     "Entity",
     "Event",
     "AddResult",
-    # Low-level API (for advanced use cases)
-    "CanonicalAttachmentV1",
-    "CanonicalTurnV1",
-    "JobStatusV1",
-    "SessionStatusV1",
-    "MemoryClient",
-    "SessionBuffer",
-    "CommitHandle",
-    "RetryConfig",
+    # Error types
     "OmemClientError",
     "OmemHttpError",
     "OmemAuthError",
@@ -80,15 +70,13 @@ __all__ = [
     "OmemPayloadTooLargeError",
     "OmemValidationError",
     "OmemServerError",
-    "LLMAdapter",
-    "LLMUsageContext",
-    "build_llm_from_env",
-    "build_llm_from_config",
-    "set_llm_usage_context",
-    "reset_llm_usage_context",
-    "set_llm_usage_hook",
-    "reset_llm_usage_hook",
-    "LLMUsageReporter",
-    "LLMUsageReporterConfig",
-    "OmemUsageError",
+    # Low-level API (for advanced use cases)
+    "MemoryClient",
+    "SessionBuffer",
+    "CommitHandle",
+    "RetryConfig",
+    "CanonicalAttachmentV1",
+    "CanonicalTurnV1",
+    "JobStatusV1",
+    "SessionStatusV1",
 ]
