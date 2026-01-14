@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterator, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 
 @dataclass
@@ -33,6 +33,8 @@ class SearchResult:
     items: List[MemoryItem]
     latency_ms: float = 0.0
     error: Optional[str] = None  # For fail_silent mode
+    debug: Optional[Dict[str, Any]] = None  # Debug info when debug=True
+    strategy: Optional[str] = None  # Strategy used (dialog_v1, dialog_v2)
 
     def __iter__(self) -> Iterator[MemoryItem]:
         return iter(self.items)

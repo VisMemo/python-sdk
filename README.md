@@ -34,13 +34,16 @@ if result:
 Main class for interacting with the memory service.
 
 ```python
-# Minimal (just api_key)
+# Minimal (just api_key) - SaaS mode (recommended)
 mem = Memory(api_key="qbk_xxx")
 
-# With user isolation (for multi-user apps)
+# Multi-user apps (SaaS)
+# NOTE: In SaaS, data is isolated at the **account** level.
+# The optional user_id is accepted for future/backend-controlled
+# isolation features but does not currently change data partitioning.
 mem = Memory(api_key="qbk_xxx", user_id="user-123")
 
-# Self-hosted deployment
+# Self-hosted deployment (advanced / not covered here)
 mem = Memory(api_key="...", endpoint="https://my-instance.com/api/v1/memory")
 ```
 
@@ -48,7 +51,7 @@ mem = Memory(api_key="...", endpoint="https://my-instance.com/api/v1/memory")
 | Parameter | Required | Default | Description |
 |-----------|----------|---------|-------------|
 | `api_key` | ✅ Yes | - | Your API key. Get one at [qbrain.ai](https://qbrain.ai) |
-| `user_id` | No | `None` | Isolate memories per user in multi-user apps |
+| `user_id` | No | `None` | Optional end-user identifier (future/backend-controlled isolation in SaaS) |
 | `endpoint` | No | Cloud service | Override for self-hosted deployments |
 | `timeout_s` | No | `30.0` | Request timeout in seconds |
 
@@ -110,22 +113,26 @@ For agent robustness, use `fail_silent=True`:
 result = mem.search("query", fail_silent=True)
 ```
 
-## Multi-User Apps
+## Multi-User Apps (SaaS)
 
-Isolate memories per user:
+In SaaS, **data is isolated at the account level**. The backend (Gateway + BFF)
+owns the effective `user_tokens` and `client_meta` based on your account
+configuration, not on SDK-side settings.
+
+You can still tag calls with an end-user identifier for your own tracking:
 
 ```python
-# Each user has their own memory space
-mem_alice = Memory(api_key="qbk_xxx", user_id="alice")
-mem_bob = Memory(api_key="qbk_xxx", user_id="bob")
+mem = Memory(api_key="qbk_xxx", user_id="alice")  # for your app's bookkeeping
 
-mem_alice.add("conv-1", [{"role": "user", "content": "I love coffee"}])
-mem_bob.add("conv-1", [{"role": "user", "content": "I love tea"}])
-
-# Searches are isolated
-mem_alice.search("what do I like?")  # → coffee
-mem_bob.search("what do I like?")    # → tea
+mem.add("conv-1", [{"role": "user", "content": "I love coffee"}])
+result = mem.search("what do I like?")
 ```
+
+Today, using different `user_id` values in SaaS **does not** guarantee separate
+vector spaces; per-user isolation is a potential future feature controlled via
+backend `memory_policy`, not SDK-side `user_tokens`.
+
+For strict isolation in SaaS **today**, use separate accounts / API keys.
 
 ## Advanced: Conversation Buffer
 
@@ -146,12 +153,49 @@ conv.add({"role": "user", "content": "Hello"})
 result = conv.commit()  # Returns AddResult with job_id
 ```
 
-## Coming Soon
+## Future: Self-Hosted User Isolation (Design Sketch)
 
-Additional APIs for TKG (Temporal Knowledge Graph) queries will be available in future releases:
-- Entity resolution
-- Timeline queries
-- Event search
+> Status: Design only – not implemented in the public SaaS service.
+
+For self-hosted deployments that need per-end-user isolation within a tenant, a
+cleaner design than `user_tokens` is:
+
+### Recommended: `X-User-ID` Header
+
+In this model:
+
+- The deployment API key authenticates the tenant
+- `X-User-ID` identifies the end user within that tenant
+- The server enforces isolation based on `(tenant_id, user_id)`
+
+Example future shape (not yet wired end-to-end):
+
+```python
+client = MemoryClient(
+    base_url="http://localhost:8000/api/v1/memory",
+    api_key="deployment_key",
+    # user_id would eventually map to X-User-ID header on requests
+    # user_id="alice",
+)
+```
+
+### Alternative: Scoped API Keys
+
+Another option for self-hosted tenants is to issue per-user API keys that
+encode both tenant and user scope:
+
+```python
+client = MemoryClient(
+    base_url="http://localhost:8000/api/v1/memory",
+    api_key="qbk_tenant_alice_scoped_key",
+)
+```
+
+In this model, the server derives both `tenant_id` and `user_id` from the key
+itself and does not need a separate header.
+
+These patterns are documented here as forward-looking guidance only; the SaaS
+service uses account-level isolation based solely on the API key.
 
 ## License
 

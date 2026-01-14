@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import json
 import random
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+
+import json
+import warnings
 
 import httpx
 
@@ -69,6 +71,26 @@ def _normalize_base_url(base_url: str) -> str:
 
 
 def _normalize_user_tokens(user_tokens: Sequence[str]) -> List[str]:
+    """
+    Normalize and validate user_tokens.
+
+    SaaS mode:
+        The public SDK no longer sends user_tokens in request payloads. Isolation
+        is handled by the SaaS control plane (gateway/api-dev) based on the API
+        key → account_id/tenant_id mapping. This helper is therefore only used
+        in self-hosted or advanced scenarios.
+
+    Self-hosted mode (future design sketch):
+        Prefer an X-User-ID header over client-controlled user_tokens in the
+        payload:
+
+            - SDK sends X-User-ID header derived from Memory(user_id=...)
+            - Server enforces isolation based on tenant_id + user_id
+            - Client cannot escalate privileges by forging tokens
+
+        The existing user_tokens field remains for backward compatibility but
+        should be considered a legacy surface.
+    """
     out = [str(x).strip() for x in (user_tokens or []) if str(x).strip()]
     if not out:
         raise ValueError("user_tokens must be non-empty")
@@ -98,6 +120,7 @@ def _as_jsonable_turn(t: CanonicalTurnV1) -> Dict[str, Any]:
         "turn_id": t.turn_id,
         "role": t.role,
         "name": t.name,
+        "speaker": t.name,  # Backend uses "speaker" for entity extraction
         "timestamp_iso": t.timestamp_iso,
         "text": t.text,
         "attachments": (attachments if attachments else None),
@@ -266,18 +289,39 @@ class MemoryClient:
         *,
         base_url: str,
         tenant_id: str,
-        user_tokens: Sequence[str],
+        user_tokens: Optional[Sequence[str]] = None,
         memory_domain: str = "dialog",
         api_token: Optional[str] = None,
         timeout_s: float = 30.0,
         retry_config: Optional[RetryConfig] = None,
         http: Optional[httpx.Client] = None,
+        mode: str = "saas",
     ) -> None:
         self.base_url = _normalize_base_url(base_url)
         self.tenant_id = str(tenant_id or "").strip()
         if not self.tenant_id:
             raise ValueError("tenant_id is required")
-        self.user_tokens = _normalize_user_tokens(user_tokens)
+        # Mode is primarily used to distinguish SaaS from self-hosted behavior.
+        # For now, only SaaS behavior is officially supported for external users.
+        self._mode = (str(mode or "saas").strip() or "saas").lower()
+
+        # In SaaS mode (tenant derived from API key), the backend BFF owns user_tokens.
+        # We still allow user_tokens for self-hosted/direct-core scenarios.
+        if user_tokens is not None:
+            if self._mode == "saas" or self.tenant_id == "__from_api_key__":
+                # Guard-rail: warn that SDK-side user_tokens are ignored in SaaS.
+                warnings.warn(
+                    "MemoryClient(user_tokens=...) is ignored in SaaS mode; "
+                    "data is isolated at account level by the backend.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                self.user_tokens: List[str] = []
+            else:
+                self.user_tokens = _normalize_user_tokens(user_tokens)
+        else:
+            self.user_tokens = []
+
         self.memory_domain = str(memory_domain or "dialog").strip() or "dialog"
         self.api_token = (str(api_token).strip() if api_token else None)
         self._timeout_s = float(timeout_s)
@@ -306,19 +350,25 @@ class MemoryClient:
         base_turn_id: Optional[str] = None,
         client_meta: Optional[Dict[str, Any]] = None,
     ) -> CommitHandle:
+        # SaaS mode: backend (Gateway + BFF) owns user_tokens and client_meta.
+        saas_mode = self._mode == "saas" or self.tenant_id == "__from_api_key__"
+
         sid = str(session_id or "").strip()
         if not sid:
             raise ValueError("session_id is required")
         cid = str(commit_id or uuid.uuid4())
         body: Dict[str, Any] = {
             "session_id": sid,
-            "user_tokens": list(self.user_tokens),
             "memory_domain": str(self.memory_domain),
             "turns": [_as_jsonable_turn(t) for t in turns],
             "commit_id": cid,
             "cursor": {"base_turn_id": (str(base_turn_id).strip() if base_turn_id else None)},
-            "client_meta": (dict(client_meta) if isinstance(client_meta, dict) else None),
         }
+        # Only attach user_tokens/client_meta when not in SaaS mode.
+        if not saas_mode and self.user_tokens:
+            body["user_tokens"] = list(self.user_tokens)
+        if not saas_mode and client_meta:
+            body["client_meta"] = dict(client_meta)
         payload = self._request_json(
             "POST",
             "/ingest",
@@ -354,18 +404,24 @@ class MemoryClient:
         tkg_explain: bool = True,
         entity_hints: Optional[Sequence[str]] = None,
         time_hints: Optional[Dict[str, Any]] = None,
+        client_meta: Optional[Dict[str, Any]] = None,
+        strategy: str = "dialog_v2",
     ) -> Dict[str, Any]:
+        # SaaS mode: backend (Gateway + BFF) owns user_tokens and client_meta.
+        saas_mode = self._mode == "saas" or self.tenant_id == "__from_api_key__"
+
         q = str(query or "").strip()
         if not q:
             raise ValueError("query is required")
         sid = str(session_id).strip() if session_id else None
+        strategy_norm = str(strategy or "dialog_v2").strip().lower()
+        if strategy_norm not in ("dialog_v1", "dialog_v2"):
+            strategy_norm = "dialog_v2"
         body: Dict[str, Any] = {
-            "tenant_id": str(self.tenant_id),
-            "user_tokens": list(self.user_tokens),
             "memory_domain": str(self.memory_domain),
             "run_id": sid,
             "query": q,
-            "strategy": "dialog_v2",
+            "strategy": strategy_norm,
             "topk": int(topk),
             "task": str(task or "GENERAL"),
             "debug": bool(debug),
@@ -375,7 +431,23 @@ class MemoryClient:
             "entity_hints": (list(entity_hints) if entity_hints else None),
             "time_hints": (dict(time_hints) if isinstance(time_hints, dict) else None),
         }
+        # In SaaS mode, gateway injects x-tenant-id header; SDK should not send tenant_id in body.
+        # Only attach tenant_id/user_tokens/client_meta when not in SaaS mode.
+        if not saas_mode:
+            body["tenant_id"] = str(self.tenant_id)
+            if self.user_tokens:
+                body["user_tokens"] = list(self.user_tokens)
+        if not saas_mode and client_meta:
+            body["client_meta"] = dict(client_meta)
         return self._request_json("POST", "/retrieval", json_body=body)
+
+    def debug_config(self) -> Dict[str, Any]:
+        """Fetch effective backend configuration for this client (if supported).
+
+        This calls the SaaS/backend debug endpoint. Not all deployments expose it;
+        in that case an OmemHttpError (e.g., 404) will be raised.
+        """
+        return self._request_json("GET", "/debug/config")
 
     # ========== TKG Graph API Methods ==========
 
@@ -522,8 +594,10 @@ class MemoryClient:
     def _headers(self) -> Dict[str, str]:
         h: Dict[str, str] = {}
         
-        # Add tenant header (self-hosted mode)
-        if self.tenant_id and self.tenant_id != "__from_api_key__":
+        # In SaaS mode, gateway injects x-tenant-id header from API key lookup.
+        # SDK should NOT send X-Tenant-ID header in SaaS mode.
+        saas_mode = self._mode == "saas" or self.tenant_id == "__from_api_key__"
+        if not saas_mode and self.tenant_id and self.tenant_id != "__from_api_key__":
             h["X-Tenant-ID"] = str(self.tenant_id)
         
         if self.api_token:

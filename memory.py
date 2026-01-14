@@ -100,19 +100,20 @@ class Memory:
 
         self._api_key = str(api_key).strip()
         self._endpoint = str(endpoint or DEFAULT_ENDPOINT).rstrip("/")
+        # NOTE: In SaaS mode, data isolation is at account level. The optional
+        # user_id is accepted for future/backend-controlled isolation features
+        # but does not currently affect SaaS data partitioning.
         self._user_id = str(user_id).strip() if user_id else None
         self._timeout_s = float(timeout_s)
-        
-        # user_tokens for data isolation (gateway derives tenant from api_key)
-        self._user_tokens = [f"user:{self._user_id}"] if self._user_id else ["default"]
 
         self._client = MemoryClient(
             base_url=self._endpoint,
             tenant_id="__from_api_key__",  # Gateway derives from api_key
-            user_tokens=self._user_tokens,
+            # SaaS mode: delegate user_tokens/client_meta to backend BFF
             memory_domain="dialog",
             api_token=self._api_key,
             timeout_s=self._timeout_s,
+            mode="saas",
         )
 
     # ========== Write API ==========
@@ -196,6 +197,7 @@ class Memory:
         *,
         limit: int = 10,
         fail_silent: bool = False,
+        debug: bool = False,
     ) -> SearchResult:
         """Search memories.
 
@@ -204,6 +206,7 @@ class Memory:
             limit: Maximum number of results (default: 10)
             fail_silent: If True, return empty result on error instead of raising.
                 Use this to ensure memory failures don't break your agent.
+            debug: If True, include detailed debug info in the result.
 
         Returns:
             SearchResult with items and helper methods:
@@ -219,6 +222,10 @@ class Memory:
             >>> # With fail_silent for robustness
             >>> result = mem.search("query", fail_silent=True)
             >>> # Returns empty SearchResult on error, never raises
+
+            >>> # With debug info
+            >>> result = mem.search("query", debug=True)
+            >>> print(result.debug)  # See executed_calls, plan, etc.
         """
         t0 = time.perf_counter()
         try:
@@ -226,6 +233,7 @@ class Memory:
                 query=query,
                 topk=limit,
                 with_answer=False,
+                debug=debug,
             )
             latency_ms = (time.perf_counter() - t0) * 1000
 
@@ -248,6 +256,8 @@ class Memory:
                 query=query,
                 items=items,
                 latency_ms=latency_ms,
+                debug=resp.get("debug") if debug else None,
+                strategy=resp.get("strategy"),
             )
 
         except Exception as exc:
@@ -258,7 +268,19 @@ class Memory:
                     latency_ms=(time.perf_counter() - t0) * 1000,
                     error=f"{type(exc).__name__}: {str(exc)[:200]}",
                 )
+            # Let structured HTTP errors bubble up so callers can inspect
+            # status_code / error codes. For SaaS, remember that data is
+            # isolated at account level (not per user_id) by the backend.
             raise
+
+    def debug_config(self) -> Dict[str, Any]:
+        """Fetch effective backend configuration for this Memory client.
+
+        This delegates to the underlying client's debug_config() helper, which
+        calls the SaaS/backend debug endpoint. Not all deployments expose it;
+        in that case an OmemHttpError (e.g., 404) will be raised.
+        """
+        return self._client.debug_config()
 
     # ========== TKG API (tenant-level) ==========
 
@@ -295,7 +317,7 @@ class Memory:
                 return None
             e = items[0]
             return Entity(
-                id=str(e.get("id") or ""),
+                id=str(e.get("entity_id") or e.get("id") or ""),
                 name=str(e.get("name") or e.get("cluster_label") or name),
                 type=str(e.get("type") or "unknown"),
                 aliases=list(e.get("aliases") or []),
@@ -335,25 +357,16 @@ class Memory:
                 entity_id=resolved.id,
                 limit=limit,
             )
-            # Timeline may have evidences/utterances, convert to events
+            # Timeline returns items array with evidences/utterances
             events: List[Event] = []
-            for item in resp.get("evidences") or []:
+            for item in resp.get("items") or []:
                 events.append(
                     Event(
-                        id=str(item.get("evidence_id") or item.get("id") or ""),
+                        id=str(item.get("evidence_id") or item.get("utterance_id") or item.get("id") or ""),
                         summary=str(item.get("text") or item.get("raw_text") or ""),
                         timestamp=_parse_datetime(
                             item.get("t_media_start") or item.get("timestamp")
                         ),
-                        entities=[resolved.name],
-                    )
-                )
-            for item in resp.get("utterances") or []:
-                events.append(
-                    Event(
-                        id=str(item.get("utterance_id") or item.get("id") or ""),
-                        summary=str(item.get("raw_text") or ""),
-                        timestamp=_parse_datetime(item.get("t_media_start")),
                         entities=[resolved.name],
                     )
                 )
