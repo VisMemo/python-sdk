@@ -1,1 +1,40 @@
-docs/
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.egg
+*.whl
+*.tar.gz
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local/internal guides (keep locally, not in repo)
+PYPI_CHECKLIST.md
+PYPI_TOKEN_GUIDE.md
+PROCESS.md
+upload_testpypi.sh

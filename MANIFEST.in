@@ -1,0 +1,8 @@
+include LICENSE
+include README.md
+include pyproject.toml
+recursive-include omem *.py
+recursive-include omem py.typed
+global-exclude __pycache__
+global-exclude *.py[cod]
+
